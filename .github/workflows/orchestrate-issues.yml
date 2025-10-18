@@ -1,0 +1,75 @@
+name: Orchestrate Issues
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      force_issue_number:
+        description: '強制実行するIssue番号（オプション）'
+        required: false
+        type: string
+
+jobs:
+  orchestrate:
+    if: github.event.label.name == 'ai:ready' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install PyGithub requests
+
+      - name: Get next executable issue
+        id: get_issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_ISSUE: ${{ github.event.inputs.force_issue_number }}
+        run: |
+          python3 scripts/get_next_issue.py
+
+      - name: Check if issue is executable
+        id: check
+        run: |
+          if [ -f out/next_issue.json ]; then
+            ISSUE_NUMBER=$(jq -r '.issue_number' out/next_issue.json)
+            echo "issue_number=${ISSUE_NUMBER}" >> $GITHUB_OUTPUT
+            echo "✅ 次の実行可能Issue: #${ISSUE_NUMBER}"
+          else
+            echo "⏸️ 実行可能なIssueがありません（依存関係待ちまたは全て完了）"
+            echo "issue_number=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger implementation workflow
+        if: steps.check.outputs.issue_number != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumber = '${{ steps.check.outputs.issue_number }}';
+
+            console.log(`🚀 Issue #${issueNumber} の実装ワークフローを起動します...`);
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'implement-issue.yml',
+              ref: 'main',
+              inputs: {
+                issue_number: issueNumber
+              }
+            });
+
+            console.log(`✅ Implementation ワークフローを起動しました`);

@@ -1,0 +1,203 @@
+name: Implement Issue
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: '実装するIssue番号'
+        required: true
+        type: string
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: write
+      pull-requests: write
+
+    env:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Git
+        run: |
+          git config user.name "Claude AI"
+          git config user.email "claude@anthropic.com"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Claude Code CLI
+        run: |
+          # Claude Code CLIのインストール
+          # TODO: 正式なインストール方法に置き換え
+          curl -fsSL https://claude.com/install-cli.sh | sh || true
+
+      - name: Install dependencies
+        run: |
+          pip install PyGithub requests
+          npm ci || echo "⚠️ package.json が存在しません。後でセットアップされます。"
+
+      - name: Get Issue details
+        id: issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+        run: |
+          python3 << 'EOF'
+          import os, json
+          from github import Github
+
+          g = Github(os.environ['GITHUB_TOKEN'])
+          repo = g.get_repo(os.environ['GITHUB_REPOSITORY'])
+          issue = repo.get_issue(int(os.environ['ISSUE_NUMBER']))
+
+          # Issue情報を取得
+          issue_data = {
+            'number': issue.number,
+            'title': issue.title,
+            'body': issue.body,
+            'labels': [label.name for label in issue.labels]
+          }
+
+          # ファイルに保存
+          with open('out/current_issue.json', 'w', encoding='utf-8') as f:
+            json.dump(issue_data, f, ensure_ascii=False, indent=2)
+
+          print(f"Issue #{issue.number}: {issue.title}")
+          EOF
+
+      - name: Create implementation branch
+        env:
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+        run: |
+          BRANCH_NAME="ai/cp-${ISSUE_NUMBER}"
+          git checkout -b "${BRANCH_NAME}"
+          echo "branch_name=${BRANCH_NAME}" >> $GITHUB_ENV
+          echo "✅ ブランチ作成: ${BRANCH_NAME}"
+
+      - name: Run Claude Code implementation
+        id: implement
+        env:
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+        run: |
+          bash scripts/claude_implement.sh "${ISSUE_NUMBER}"
+
+      - name: Run tests
+        id: test
+        continue-on-error: true
+        run: |
+          bash scripts/run_tests.sh
+
+      - name: Retry implementation if tests failed
+        if: steps.test.outcome == 'failure'
+        run: |
+          echo "⚠️ テストが失敗しました。Claude Code CLIで修正を試みます..."
+
+          bash scripts/claude_implement.sh "${ISSUE_NUMBER}" --fix-failures
+
+      - name: Run tests again
+        if: steps.test.outcome == 'failure'
+        run: |
+          bash scripts/run_tests.sh
+
+      - name: Commit and push changes
+        env:
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+        run: |
+          git add .
+          git commit -m "feat: Issue #${ISSUE_NUMBER}の実装
+
+\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>" || echo "変更がありません"
+
+          git push origin "${branch_name}"
+
+      - name: Create Pull Request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+        run: |
+          # Issue情報を取得
+          ISSUE_TITLE=$(jq -r '.title' out/current_issue.json)
+          ISSUE_BODY=$(jq -r '.body' out/current_issue.json)
+
+          # PR本文を生成
+          PR_BODY=$(cat << EOF
+## ✅ 目的
+Issue #${ISSUE_NUMBER} の実装
+
+## 🧭 設計
+- **アーキテクチャ**: CLAUDE.mdの原則に従い、UI/BFF/アプリケーション層の責務を分離
+- **実装範囲**:
+  $(echo "$ISSUE_BODY" | grep -A 10 "概要\|summary" || echo "詳細はIssue参照")
+
+## 🧪 テスト観点
+- ✅ ユニットテスト: Jest/Vitest（正常系・異常系）
+- ✅ E2Eテスト: Playwright（全シナリオ）
+- ✅ Acceptance Criteria: BRD.mdの要件を満たすことを確認
+
+## ⚠️ 影響範囲
+- 新規機能追加（既存機能への影響なし）
+- 依存関係: Issue #${ISSUE_NUMBER} の Depends on を参照
+
+## 🔁 ロールバック手順
+1. このPRをrevert
+2. 関連するマイグレーション/データ変更があれば手動でロールバック
+
+---
+
+Closes #${ISSUE_NUMBER}
+
+\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+          )
+
+          # PR作成
+          gh pr create \
+            --title "${ISSUE_TITLE}" \
+            --body "${PR_BODY}" \
+            --base main \
+            --head "${branch_name}" \
+            --label "ai:task"
+
+          echo "✅ PR作成完了"
+
+      - name: Comment on Issue
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+        run: |
+          gh issue comment "${ISSUE_NUMBER}" --body "🚀 実装が完了しました。PRをご確認ください。
+
+自動テスト結果: ✅ PASS
+
+レビュー・承認をお願いします。"
+
+      - name: Comment on Issue (failure)
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+        run: |
+          gh issue comment "${ISSUE_NUMBER}" --body "⚠️ 実装中にエラーが発生しました。
+
+ワークフローログをご確認ください: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

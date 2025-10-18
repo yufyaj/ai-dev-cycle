@@ -1,0 +1,90 @@
+name: Auto Merge
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  auto-merge:
+    if: github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if all CI checks passed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # PR のステータスチェックを確認
+          STATUS=$(gh pr view "${PR_NUMBER}" --json statusCheckRollup --jq '.statusCheckRollup[].conclusion' | grep -v "SUCCESS" | wc -l)
+
+          if [ "$STATUS" -gt 0 ]; then
+            echo "⚠️ CI チェックが完了していないか、失敗しています"
+            exit 1
+          fi
+
+          echo "✅ 全てのCIチェックが成功しました"
+
+      - name: Enable auto-merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr merge "${PR_NUMBER}" --auto --squash
+
+          echo "✅ Auto-merge を有効化しました"
+
+      - name: Wait for merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # マージ完了を待つ（最大5分）
+          for i in {1..30}; do
+            STATUS=$(gh pr view "${PR_NUMBER}" --json state --jq '.state')
+            if [ "$STATUS" == "MERGED" ]; then
+              echo "✅ PRがマージされました"
+              break
+            fi
+            echo "⏳ マージ待機中... (${i}/30)"
+            sleep 10
+          done
+
+      - name: Close related issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # PRから関連Issueを取得
+          ISSUE_NUMBER=$(gh pr view "${PR_NUMBER}" --json body --jq '.body' | grep -oP 'Closes #\K[0-9]+' | head -1)
+
+          if [ -n "$ISSUE_NUMBER" ]; then
+            gh issue close "${ISSUE_NUMBER}" --comment "✅ Issue #${ISSUE_NUMBER} は PR #${PR_NUMBER} でマージされました。"
+            echo "✅ Issue #${ISSUE_NUMBER} をクローズしました"
+          fi
+
+      - name: Trigger next issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Orchestrator ワークフローを再実行して次のIssueを処理
+          gh workflow run orchestrate-issues.yml
+
+          echo "🚀 次のIssueの処理を開始しました"
+
+      - name: Post success comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "${PR_NUMBER}" --body "🎉 **マージが完了しました！**
+
+関連Issueもクローズされ、次のIssueの自動実装が開始されました。
+
+ありがとうございました！"
