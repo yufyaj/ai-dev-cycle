@@ -120,11 +120,14 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
         run: |
           git add .
-          git commit -m "feat: Issue #${ISSUE_NUMBER}の実装
+          git commit -m "$(cat <<'EOF'
+          feat: Issue #${ISSUE_NUMBER}の実装
 
-\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)
+          Generated with Claude Code (https://claude.com/claude-code)
 
-Co-Authored-By: Claude <noreply@anthropic.com>" || echo "変更がありません"
+          Co-Authored-By: Claude <noreply@anthropic.com>
+          EOF
+          )" || echo "変更がありません"
 
           git push origin "${branch_name}"
 
@@ -138,36 +141,35 @@ Co-Authored-By: Claude <noreply@anthropic.com>" || echo "変更がありませ�
           ISSUE_BODY=$(jq -r '.body' out/current_issue.json)
 
           # PR本文を生成
-          PR_BODY=$(cat << EOF
-## ✅ 目的
-Issue #${ISSUE_NUMBER} の実装
+          PR_BODY=$(cat << 'EOFPR'
+          ## ✅ 目的
+          Issue #${ISSUE_NUMBER} の実装
 
-## 🧭 設計
-- **アーキテクチャ**: CLAUDE.mdの原則に従い、UI/BFF/アプリケーション層の責務を分離
-- **実装範囲**:
-  $(echo "$ISSUE_BODY" | grep -A 10 "概要\|summary" || echo "詳細はIssue参照")
+          ## 🧭 設計
+          - **アーキテクチャ**: CLAUDE.mdの原則に従い、UI/BFF/アプリケーション層の責務を分離
+          - **実装範囲**: 詳細はIssue参照
 
-## 🧪 テスト観点
-- ✅ ユニットテスト: Jest/Vitest（正常系・異常系）
-- ✅ E2Eテスト: Playwright（全シナリオ）
-- ✅ Acceptance Criteria: BRD.mdの要件を満たすことを確認
+          ## 🧪 テスト観点
+          - ✅ ユニットテスト: Jest/Vitest（正常系・異常系）
+          - ✅ E2Eテスト: Playwright（全シナリオ）
+          - ✅ Acceptance Criteria: BRD.mdの要件を満たすことを確認
 
-## ⚠️ 影響範囲
-- 新規機能追加（既存機能への影響なし）
-- 依存関係: Issue #${ISSUE_NUMBER} の Depends on を参照
+          ## ⚠️ 影響範囲
+          - 新規機能追加（既存機能への影響なし）
+          - 依存関係: Issue参照
 
-## 🔁 ロールバック手順
-1. このPRをrevert
-2. 関連するマイグレーション/データ変更があれば手動でロールバック
+          ## 🔁 ロールバック手順
+          1. このPRをrevert
+          2. 関連するマイグレーション/データ変更があれば手動でロールバック
 
----
+          ---
 
-Closes #${ISSUE_NUMBER}
+          Closes #${ISSUE_NUMBER}
 
-\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)
+          Generated with Claude Code (https://claude.com/claude-code)
 
-Co-Authored-By: Claude <noreply@anthropic.com>
-EOF
+          Co-Authored-By: Claude <noreply@anthropic.com>
+          EOFPR
           )
 
           # PR作成
@@ -188,9 +190,9 @@ EOF
         run: |
           gh issue comment "${ISSUE_NUMBER}" --body "🚀 実装が完了しました。PRをご確認ください。
 
-自動テスト結果: ✅ PASS
+          自動テスト結果: ✅ PASS
 
-レビュー・承認をお願いします。"
+          レビュー・承認をお願いします。"
 
       - name: Comment on Issue (failure)
         if: failure()
@@ -200,4 +202,4 @@ EOF
         run: |
           gh issue comment "${ISSUE_NUMBER}" --body "⚠️ 実装中にエラーが発生しました。
 
-ワークフローログをご確認ください: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          ワークフローログをご確認ください: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
