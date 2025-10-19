@@ -66,7 +66,7 @@ jobs:
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: 'implement-issue-v2.yml',
+              workflow_id: 'task-executor.yml',
               ref: 'main',
               inputs: {
                 issue_number: issueNumber
