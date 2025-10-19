@@ -12,12 +12,24 @@ on:
         required: false
         type: string
         default: '3'
+      retry_count:
+        description: '現在のリトライ回数（内部使用）'
+        required: false
+        type: string
+        default: '0'
+      feedback:
+        description: '前回実行のフィードバック（内部使用）'
+        required: false
+        type: string
+        default: ''
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
   ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
   MAX_RETRY: ${{ github.event.inputs.max_retry_count }}
+  RETRY_COUNT: ${{ github.event.inputs.retry_count }}
+  FEEDBACK: ${{ github.event.inputs.feedback }}
 
 jobs:
   # =====================================
@@ -82,6 +94,17 @@ jobs:
           4. ⏹️ セキュリティチェック
           5. ⏹️ PR作成"
 
+      - name: Check for feedback
+        id: check-feedback
+        run: |
+          if [ -n "${{ env.FEEDBACK }}" ]; then
+            echo "📝 前回実行のフィードバックあり:"
+            echo "${{ env.FEEDBACK }}"
+            echo "has_feedback=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_feedback=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Implementation with Claude
         uses: anthropics/claude-code-action@beta
         with:
@@ -96,12 +119,15 @@ jobs:
             内容:
             ${{ steps.issue-details.outputs.body }}
 
+            ${{ steps.check-feedback.outputs.has_feedback == 'true' && format('⚠️ 前回実行での問題点（必ず対応してください）:\n{0}\n\nこれらの問題を解決するよう実装を見直してください。', env.FEEDBACK) || '' }}
+
             以下の要件を守ってください：
             1. CLAUDE.mdのルールを厳守
             2. TDD原則でテストコードも実装
             3. PRサイズは10ファイル/500行以内
             4. 責務分離を遵守（レイヤー境界を守る）
             5. セキュリティを考慮（Secretsをコミットしない）
+            ${{ steps.check-feedback.outputs.has_feedback == 'true' && '6. 前回の問題点を必ず解決する' || '' }}
 
             必要なファイルを作成・編集して、実装を完成させてください。
 
@@ -149,6 +175,7 @@ jobs:
       actions: write
     outputs:
       test_passed: ${{ steps.test-result.outputs.passed }}
+      needs_reimplementation: ${{ steps.final-check.outputs.needs_reimplementation }}
 
     steps:
       - name: Checkout branch
@@ -244,6 +271,34 @@ jobs:
           fi
           echo "✅ 修正後のテスト成功"
 
+      - name: Determine if reimplementation needed
+        id: final-check
+        run: |
+          # 3回以上の修正試行、または根本的な設計問題がある場合は再実装
+          if [ -f out/test_results.log ]; then
+            # エラーパターンをチェック
+            if grep -q "ModuleNotFoundError\|ImportError\|SyntaxError" out/test_results.log; then
+              echo "🔄 根本的な問題を検出 - 再実装が必要です"
+              echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
+
+              # フィードバック情報を作成
+              cat > out/feedback.txt << EOF
+          テストで以下の根本的な問題が検出されました:
+          - モジュール/インポートエラーまたは構文エラー
+          - テストの基本的な実行に失敗
+
+          実装を見直し、以下を確認してください:
+          1. 必要な依存関係がすべて実装されているか
+          2. モジュール構造が正しいか
+          3. 構文エラーがないか
+          EOF
+            else
+              echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         with:
@@ -264,6 +319,7 @@ jobs:
       actions: write
     outputs:
       review_passed: ${{ steps.review-result.outputs.passed }}
+      needs_reimplementation: ${{ steps.final-check.outputs.needs_reimplementation }}
 
     steps:
       - name: Checkout branch
@@ -361,6 +417,40 @@ jobs:
             git push
           fi
 
+      - name: Determine if reimplementation needed
+        id: final-check
+        run: |
+          if [ -f out/review_result.json ]; then
+            # レビュー結果から判定
+            HAS_CRITICAL=$(python3 -c "import json; r=json.load(open('out/review_result.json')); issues=r.get('issues',[]); print('true' if any(i.get('severity') in ['critical'] for i in issues) else 'false')")
+
+            if [ "$HAS_CRITICAL" == "true" ]; then
+              echo "🔄 アーキテクチャレベルの問題を検出 - 再実装が必要です"
+              echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
+
+              # フィードバック情報を作成
+              python3 -c "
+import json
+with open('out/review_result.json') as f:
+    review = json.load(f)
+
+feedback = []
+feedback.append('レビューで以下のクリティカルな問題が検出されました:')
+for issue in review.get('issues', []):
+    if issue.get('severity') == 'critical':
+        feedback.append(f\"- {issue.get('description')} ({issue.get('file', 'N/A')})\")
+        feedback.append(f\"  推奨: {issue.get('suggestion', 'N/A')}\")
+
+with open('out/feedback.txt', 'w') as f:
+    f.write('\n'.join(feedback))
+"
+            else
+              echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Upload review results
         uses: actions/upload-artifact@v4
         with:
@@ -382,6 +472,7 @@ jobs:
       security-events: write
     outputs:
       security_passed: ${{ steps.security-result.outputs.passed }}
+      needs_reimplementation: ${{ steps.final-check.outputs.needs_reimplementation }}
 
     steps:
       - name: Checkout branch
@@ -483,6 +574,45 @@ jobs:
 
             Co-authored-by: Claude AI <claude-agent@anthropic.com>"
             git push
+          fi
+
+      - name: Determine if reimplementation needed
+        id: final-check
+        run: |
+          if [ -f out/security_analysis.json ]; then
+            # セキュリティ分析結果から判定
+            HAS_CRITICAL=$(python3 -c "import json; r=json.load(open('out/security_analysis.json')); print('true' if r.get('has_critical_issues', False) else 'false')")
+            HAS_SECRETS=$(python3 -c "import json; r=json.load(open('out/security_analysis.json')); print('true' if r.get('has_secrets', False) else 'false')")
+
+            if [ "$HAS_SECRETS" == "true" ]; then
+              echo "🔄 Secretsの埋め込みを検出 - 再実装が必要です"
+              echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
+
+              # フィードバック情報を作成
+              python3 -c "
+import json
+with open('out/security_analysis.json') as f:
+    security = json.load(f)
+
+feedback = []
+feedback.append('セキュリティ分析で以下の重大な問題が検出されました:')
+for issue in security.get('issues', []):
+    if issue.get('severity') in ['critical']:
+        feedback.append(f\"- {issue.get('description')} ({issue.get('file', 'N/A')})\")
+        feedback.append(f\"  推奨: {issue.get('recommendation', 'N/A')}\")
+
+if security.get('has_secrets'):
+    feedback.append('- Secretsや認証情報のハードコーディングが検出されました')
+    feedback.append('  推奨: 環境変数またはGitHub Secretsを使用してください')
+
+with open('out/feedback.txt', 'w') as f:
+    f.write('\n'.join(feedback))
+"
+            else
+              echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Upload security results
@@ -600,3 +730,105 @@ jobs:
           echo "  - レビュー: ${{ needs.review.outputs.review_passed == 'true' && '✅' || '⚠️ (修正済み)' }}"
           echo "  - セキュリティ: ${{ needs.security.outputs.security_passed == 'true' && '✅' || '⚠️ (修正済み)' }}"
           echo "======================================"
+
+  # =====================================
+  # JOB 6: 再実装判定と再実行
+  # =====================================
+  check-and-retry:
+    name: "🔄 再実装判定"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [test, review, security]
+    if: |
+      needs.test.outputs.needs_reimplementation == 'true' ||
+      needs.review.outputs.needs_reimplementation == 'true' ||
+      needs.security.outputs.needs_reimplementation == 'true'
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+
+    steps:
+      - name: Check retry count
+        id: check-retry
+        run: |
+          CURRENT_RETRY=${{ env.RETRY_COUNT }}
+          MAX_RETRY=${{ env.MAX_RETRY }}
+          echo "現在のリトライ回数: $CURRENT_RETRY / $MAX_RETRY"
+
+          if [ "$CURRENT_RETRY" -ge "$MAX_RETRY" ]; then
+            echo "❌ 最大リトライ回数に達しました"
+            echo "can_retry=false" >> $GITHUB_OUTPUT
+          else
+            echo "can_retry=true" >> $GITHUB_OUTPUT
+            NEXT_RETRY=$((CURRENT_RETRY + 1))
+            echo "next_retry=$NEXT_RETRY" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Collect feedback
+        if: steps.check-retry.outputs.can_retry == 'true'
+        id: collect-feedback
+        run: |
+          mkdir -p out
+          FEEDBACK=""
+
+          # 各ジョブからフィードバックを収集（簡略化版）
+          echo "📝 フィードバックを収集中..."
+
+          if [ "${{ needs.test.outputs.needs_reimplementation }}" == "true" ]; then
+            FEEDBACK="${FEEDBACK}[テスト] 根本的な問題が検出されました。モジュール構造や依存関係を見直してください。\n"
+          fi
+
+          if [ "${{ needs.review.outputs.needs_reimplementation }}" == "true" ]; then
+            FEEDBACK="${FEEDBACK}[レビュー] アーキテクチャレベルの問題があります。CLAUDE.mdのルールを確認してください。\n"
+          fi
+
+          if [ "${{ needs.security.outputs.needs_reimplementation }}" == "true" ]; then
+            FEEDBACK="${FEEDBACK}[セキュリティ] Secretsのハードコーディングまたは重大な脆弱性が検出されました。\n"
+          fi
+
+          # フィードバックを保存
+          echo -e "$FEEDBACK" > out/combined_feedback.txt
+          echo "feedback<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$FEEDBACK" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Update issue with retry information
+        if: steps.check-retry.outputs.can_retry == 'true'
+        run: |
+          gh issue comment "${{ env.ISSUE_NUMBER }}" --body "🔄 **再実装が必要です**
+
+          リトライ回数: ${{ steps.check-retry.outputs.next_retry }} / ${{ env.MAX_RETRY }}
+
+          検出された問題:
+          - テスト: ${{ needs.test.outputs.needs_reimplementation == 'true' && '要再実装' || 'OK' }}
+          - レビュー: ${{ needs.review.outputs.needs_reimplementation == 'true' && '要再実装' || 'OK' }}
+          - セキュリティ: ${{ needs.security.outputs.needs_reimplementation == 'true' && '要再実装' || 'OK' }}
+
+          フィードバックを基に再実装を開始します..."
+
+      - name: Trigger workflow retry
+        if: steps.check-retry.outputs.can_retry == 'true'
+        run: |
+          echo "🔄 ワークフローを再実行します..."
+
+          # ワークフローを再実行（フィードバック付き）
+          gh workflow run auto-complete-pipeline.yml \
+            --field issue_number="${{ env.ISSUE_NUMBER }}" \
+            --field max_retry_count="${{ env.MAX_RETRY }}" \
+            --field retry_count="${{ steps.check-retry.outputs.next_retry }}" \
+            --field feedback="${{ steps.collect-feedback.outputs.feedback }}"
+
+      - name: Final failure notification
+        if: steps.check-retry.outputs.can_retry == 'false'
+        run: |
+          gh issue comment "${{ env.ISSUE_NUMBER }}" --body "❌ **自動実装失敗**
+
+          最大リトライ回数（${{ env.MAX_RETRY }}回）に達しました。
+
+          手動での介入が必要です。以下の問題が解決できませんでした:
+          - テスト: ${{ needs.test.outputs.needs_reimplementation == 'true' && '❌ 根本的な問題あり' || '✅' }}
+          - レビュー: ${{ needs.review.outputs.needs_reimplementation == 'true' && '❌ アーキテクチャ問題あり' || '✅' }}
+          - セキュリティ: ${{ needs.security.outputs.needs_reimplementation == 'true' && '❌ セキュリティ問題あり' || '✅' }}"
+
+          exit 1
