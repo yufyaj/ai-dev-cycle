@@ -80,14 +80,14 @@ jobs:
             else
               # 優先度順で最初の実行可能な Issue を選択
               ISSUE_NUMBER=$(python3 << 'EOF'
-              import json
-              with open('out/prioritized_issues.json', 'r') as f:
-                  issues = json.load(f)
-                  for issue in issues:
-                      if issue['status'] == 'ready':
-                          print(issue['number'])
-                          break
-              EOF
+import json
+with open('out/prioritized_issues.json', 'r') as f:
+    issues = json.load(f)
+    for issue in issues:
+        if issue['status'] == 'ready':
+            print(issue['number'])
+            break
+EOF
               )
             fi
 
