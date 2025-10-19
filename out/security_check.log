@@ -1,0 +1,10 @@
+[CRITICAL] Hardcoded PGP Private Key
+  File: scripts/security_check.py:40
+  PGP Private Key が検出されました
+  Code: (r'-----BEGIN PGP PRIVATE KEY BLOCK-----', 'PGP Private Key'),
+
+[WARNING] Insecure HTTP
+  File: scripts/security_check.py:190
+  Insecure HTTP の可能性があります
+  Code: (r'http://(?!localhost|127\.0\.0\.1)', 'Insecure HTTP', 'warning'),
+
