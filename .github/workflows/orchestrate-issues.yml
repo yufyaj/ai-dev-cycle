@@ -63,11 +63,12 @@ jobs:
 
             console.log(`🚀 Issue #${issueNumber} の実装ワークフローを起動します...`);
 
-            await github.rest.repos.createDispatchEvent({
+            await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              event_type: 'implement-issue',
-              client_payload: {
+              workflow_id: 'implement-issue.yml',
+              ref: 'main',
+              inputs: {
                 issue_number: issueNumber
               }
             });
