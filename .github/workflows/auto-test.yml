@@ -107,8 +107,11 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-          # promptで自動修正（@claude不要）
-          prompt: |
+          # agentモード（workflow_dispatch対応）
+          mode: 'agent'
+
+          # direct_promptで自動修正（@claude不要）
+          direct_prompt: |
             テストが失敗しました。エラーを修正してください。
 
             Issue #${{ github.event.inputs.issue_number }}

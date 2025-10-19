@@ -108,8 +108,11 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-          # promptで自動レビュー（@claude不要）
-          prompt: |
+          # agentモード（workflow_dispatch対応）
+          mode: 'agent'
+
+          # direct_promptで自動レビュー（@claude不要）
+          direct_prompt: |
             Issue #${{ github.event.inputs.issue_number }} の実装をレビューしてください。
 
             ブランチ: ${{ github.event.inputs.branch_name }}
@@ -162,8 +165,11 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-          # promptで自動修正（@claude不要）
-          prompt: |
+          # agentモード（workflow_dispatch対応）
+          mode: 'agent'
+
+          # direct_promptで自動修正（@claude不要）
+          direct_prompt: |
             レビューで指摘された問題を修正してください。
 
             Issue #${{ github.event.inputs.issue_number }}
