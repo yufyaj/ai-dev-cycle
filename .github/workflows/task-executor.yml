@@ -1,6 +1,8 @@
 name: Task Executor
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       issue_number:
