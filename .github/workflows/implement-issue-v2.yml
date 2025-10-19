@@ -1,4 +1,4 @@
-name: Implement Issue
+name: Implement Issue v2
 
 on:
   workflow_dispatch:
