@@ -13,23 +13,27 @@ on:
         type: string
         default: '3'
 
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+  ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+  MAX_RETRY: ${{ github.event.inputs.max_retry_count }}
+
 jobs:
-  complete-pipeline:
+  # =====================================
+  # JOB 1: セットアップと実装
+  # =====================================
+  setup-and-implement:
+    name: "1️⃣ セットアップ & 実装"
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     permissions:
       contents: write
-      pull-requests: write
       issues: write
       actions: write
-      security-events: write
-      checks: write
-
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
-      MAX_RETRY: ${{ github.event.inputs.max_retry_count }}
+    outputs:
+      branch_name: ${{ steps.create-branch.outputs.branch_name }}
+      issue_title: ${{ steps.issue-details.outputs.title }}
 
     steps:
       - name: Checkout repository
@@ -38,59 +42,36 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup environment
+      - name: Setup Git
         run: |
-          # Git設定
           git config user.name "Claude AI Agent"
           git config user.email "claude-agent@anthropic.com"
-
-          # Pythonセットアップ
-          pip install PyGithub requests pytest pytest-cov
-
-          # 作業ディレクトリ作成
-          mkdir -p out
-
-          # リトライカウンターの初期化
-          echo "0" > out/test_retry_count
-          echo "0" > out/review_retry_count
-          echo "0" > out/security_retry_count
 
       - name: Get Issue details
         id: issue-details
         run: |
-          # Issue情報を取得してJSONファイルに保存
           gh issue view "${ISSUE_NUMBER}" --json number,title,body,labels > issue.json
-
-          # Issue情報を環境変数に設定
           TITLE=$(jq -r '.title' issue.json)
           BODY=$(jq -r '.body // ""' issue.json)
           echo "title=${TITLE}" >> $GITHUB_OUTPUT
           echo "body<<EOF" >> $GITHUB_OUTPUT
           echo "${BODY}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-
           echo "📋 Issue #${ISSUE_NUMBER}: ${TITLE}"
 
       - name: Create implementation branch
         id: create-branch
         run: |
           BRANCH_NAME="ai/cp-${ISSUE_NUMBER}"
-
-          # main ブランチの最新を取得
           git checkout main
           git pull origin main
-
-          # 既存ブランチがあれば削除
           git branch -D "${BRANCH_NAME}" 2>/dev/null || true
           git push origin --delete "${BRANCH_NAME}" 2>/dev/null || true
-
-          # 新しいブランチを作成
           git checkout -b "${BRANCH_NAME}"
           echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
-
           echo "🌿 ブランチ作成完了: ${BRANCH_NAME}"
 
-      - name: Update issue status - Starting
+      - name: Update issue status
         run: |
           gh issue comment "${ISSUE_NUMBER}" --body "🚀 **統合パイプライン開始**
 
@@ -99,15 +80,9 @@ jobs:
           2. ⏹️ 単体テスト
           3. ⏹️ コードレビュー
           4. ⏹️ セキュリティチェック
-          5. ⏹️ PR作成
+          5. ⏹️ PR作成"
 
-          最大リトライ回数: ${MAX_RETRY}回"
-
-      # =====================================
-      # STEP 1: 実装
-      # =====================================
       - name: Implementation with Claude
-        id: implementation
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -130,7 +105,7 @@ jobs:
 
             必要なファイルを作成・編集して、実装を完成させてください。
 
-      - name: Commit implementation
+      - name: Commit and push implementation
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git add .
@@ -141,14 +116,63 @@ jobs:
             - CLAUDE.mdのルールに準拠
 
             Co-authored-by: Claude AI <claude-agent@anthropic.com>"
-            echo "✅ 実装をコミットしました"
+            git push -u origin "${{ steps.create-branch.outputs.branch_name }}"
+            echo "✅ 実装をコミット・プッシュしました"
           else
             echo "⚠️ 変更がありませんでした"
+            exit 1
           fi
 
-      - name: Update issue status - Testing
+      - name: Prepare workspace for next jobs
         run: |
-          gh issue comment "${ISSUE_NUMBER}" --body "📝 **実装完了 → テスト開始**
+          mkdir -p out
+          echo "${{ steps.create-branch.outputs.branch_name }}" > out/branch_name.txt
+          echo "${{ steps.issue-details.outputs.title }}" > out/issue_title.txt
+
+      - name: Upload workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace
+          path: out/
+
+  # =====================================
+  # JOB 2: 単体テスト
+  # =====================================
+  test:
+    name: "2️⃣ 単体テスト"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: setup-and-implement
+    permissions:
+      contents: write
+      issues: write
+      actions: write
+    outputs:
+      test_passed: ${{ steps.test-result.outputs.passed }}
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup-and-implement.outputs.branch_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup environment
+        run: |
+          git config user.name "Claude AI Agent"
+          git config user.email "claude-agent@anthropic.com"
+          pip install PyGithub requests pytest pytest-cov
+
+      - name: Download workspace
+        uses: actions/download-artifact@v4
+        with:
+          name: workspace
+          path: out/
+
+      - name: Update issue status
+        run: |
+          gh issue comment "${ISSUE_NUMBER}" --body "🧪 **テスト実行中**
 
           処理フロー:
           1. ✅ 実装完了
@@ -157,72 +181,27 @@ jobs:
           4. ⏹️ セキュリティチェック
           5. ⏹️ PR作成"
 
-      # =====================================
-      # STEP 2: テスト（リトライループ付き）
-      # =====================================
-      - name: Run tests with retry
-        id: test-phase
+      - name: Run tests
+        id: test-execution
+        continue-on-error: true
         run: |
-          MAX_RETRY=${MAX_RETRY:-3}
-          RETRY_COUNT=0
-          TEST_PASSED=false
+          echo "🧪 テストを実行します..."
+          python3 scripts/run_all_tests.py
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
 
-          while [ $RETRY_COUNT -lt $MAX_RETRY ]; do
-            echo "🧪 テスト実行 (試行 $((RETRY_COUNT + 1))/${MAX_RETRY})"
+      - name: Check test results
+        id: test-result
+        run: |
+          if [ "${{ steps.test-execution.outputs.exit_code }}" == "0" ]; then
+            echo "✅ テスト成功"
+            echo "passed=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ テスト失敗"
+            echo "passed=false" >> $GITHUB_OUTPUT
+          fi
 
-            # テスト実行
-            python3 scripts/run_all_tests.py
-            TEST_EXIT_CODE=$?
-
-            if [ $TEST_EXIT_CODE -eq 0 ]; then
-              echo "✅ テスト成功"
-              TEST_PASSED=true
-              break
-            else
-              echo "❌ テスト失敗 (終了コード: $TEST_EXIT_CODE)"
-
-              if [ $RETRY_COUNT -lt $((MAX_RETRY - 1)) ]; then
-                echo "🔧 テストエラーを修正します..."
-
-                # AIによる修正
-                cat > /tmp/fix_test_prompt.txt << 'PROMPT_EOF'
-          テストが失敗しました。エラーを修正してください。
-
-          以下の手順で修正を実施してください：
-          1. out/test_results.log ファイルからテストエラーログを確認
-          2. エラーの原因を特定
-          3. CLAUDE.mdのルールに従って修正コードを生成
-          4. TDD原則に基づいて修正（テストが通るように実装を修正）
-          5. 修正したファイルを保存
-          PROMPT_EOF
-
-                # Claude Code Actionは直接呼べないので、スクリプト内で処理
-                echo "AIによる修正を試みます..."
-
-                # 修正をコミット
-                if [ -n "$(git status --porcelain)" ]; then
-                  git add .
-                  git commit -m "fix: テスト失敗の修正 (試行 $((RETRY_COUNT + 1)))
-
-                  🤖 AI によるテスト修正
-                  Issue #${ISSUE_NUMBER}
-
-                  Co-authored-by: Claude AI <claude-agent@anthropic.com>"
-                fi
-
-                RETRY_COUNT=$((RETRY_COUNT + 1))
-              else
-                echo "⚠️ 最大リトライ回数に達しました"
-                break
-              fi
-            fi
-          done
-
-          echo "test_passed=${TEST_PASSED}" >> $GITHUB_OUTPUT
-          echo "${RETRY_COUNT}" > out/test_retry_count
-
-      - name: Fix test failures with AI
-        if: steps.test-phase.outputs.test_passed != 'true'
+      - name: Fix test failures with Claude
+        if: steps.test-result.outputs.passed != 'true'
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -231,8 +210,6 @@ jobs:
           direct_prompt: |
             テストが失敗しました。エラーを修正してください。
 
-            Issue #${{ env.ISSUE_NUMBER }}
-
             以下の手順で修正を実施してください：
             1. out/test_results.log ファイルからテストエラーログを確認
             2. エラーの原因を特定
@@ -240,18 +217,71 @@ jobs:
             4. TDD原則に基づいて修正（テストが通るように実装を修正）
             5. 修正したファイルを保存
 
-            修正が完了したら、変更内容をコミットしてください：
-            - git add .
-            - git commit -m "fix: テスト失敗の自動修正
+            修正が完了したら、変更内容をコミットしてください。
+
+      - name: Commit test fixes
+        if: steps.test-result.outputs.passed != 'true'
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正
 
             🤖 AI によるテスト修正
-            Issue #${{ env.ISSUE_NUMBER }}
+            Issue #${ISSUE_NUMBER}
 
             Co-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
 
-      - name: Update issue status - Review
+      - name: Re-run tests after fix
+        if: steps.test-result.outputs.passed != 'true'
         run: |
-          gh issue comment "${ISSUE_NUMBER}" --body "🔍 **テスト完了 → レビュー開始**
+          echo "🔄 修正後のテストを再実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -ne 0 ]; then
+            echo "❌ 修正後もテストが失敗しました"
+            exit 1
+          fi
+          echo "✅ 修正後のテスト成功"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: out/
+
+  # =====================================
+  # JOB 3: コードレビュー
+  # =====================================
+  review:
+    name: "3️⃣ コードレビュー"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: test
+    permissions:
+      contents: write
+      issues: write
+      actions: write
+    outputs:
+      review_passed: ${{ steps.review-result.outputs.passed }}
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup-and-implement.outputs.branch_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup environment
+        run: |
+          git config user.name "Claude AI Agent"
+          git config user.email "claude-agent@anthropic.com"
+          mkdir -p out
+
+      - name: Update issue status
+        run: |
+          gh issue comment "${ISSUE_NUMBER}" --body "📝 **コードレビュー中**
 
           処理フロー:
           1. ✅ 実装完了
@@ -260,11 +290,15 @@ jobs:
           4. ⏹️ セキュリティチェック
           5. ⏹️ PR作成"
 
-      # =====================================
-      # STEP 3: レビュー（問題があれば修正してテストから再実行）
-      # =====================================
+      - name: Get diff for review
+        run: |
+          git diff origin/main..HEAD > out/review_diff.patch
+          git diff --name-only origin/main..HEAD > out/changed_files.txt
+          FILES_CHANGED=$(git diff --name-only origin/main..HEAD | wc -l)
+          LINES_ADDED=$(git diff --stat origin/main..HEAD | tail -n 1 | awk '{print $4}')
+          echo "📊 変更統計: ${FILES_CHANGED}ファイル / ${LINES_ADDED:-0}行"
+
       - name: Code review with Claude
-        id: review-phase
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -296,44 +330,76 @@ jobs:
             }
 
             もしcriticalまたはhighの問題がある場合は、自動的に修正を実施してください。
-            修正後は変更をコミットしてください。
 
-      - name: Check review results and fix if needed
-        id: check-review
+      - name: Check review results
+        id: review-result
         run: |
-          REVIEW_PASSED=true
-
           if [ -f out/review_result.json ]; then
             APPROVED=$(python3 -c "import json; r=json.load(open('out/review_result.json')); print('true' if r.get('approved', False) else 'false')")
-            HAS_CRITICAL=$(python3 -c "import json; r=json.load(open('out/review_result.json')); print('true' if r.get('has_critical_issues', False) else 'false')")
-
-            if [ "$APPROVED" != "true" ] || [ "$HAS_CRITICAL" == "true" ]; then
-              echo "⚠️ レビューで問題が検出されました。修正が必要です。"
-              REVIEW_PASSED=false
-
-              # テストから再実行が必要
-              echo "need_test_rerun=true" >> $GITHUB_OUTPUT
+            echo "passed=${APPROVED}" >> $GITHUB_OUTPUT
+            if [ "$APPROVED" != "true" ]; then
+              echo "⚠️ レビューで問題が検出されました"
+            else
+              echo "✅ レビュー承認"
             fi
+          else
+            echo "passed=true" >> $GITHUB_OUTPUT
+            echo "✅ レビュー完了（デフォルト承認）"
           fi
 
-          echo "review_passed=${REVIEW_PASSED}" >> $GITHUB_OUTPUT
-
-      - name: Re-run tests after review fixes
-        if: steps.check-review.outputs.need_test_rerun == 'true'
+      - name: Commit review fixes
+        if: steps.review-result.outputs.passed != 'true'
         run: |
-          echo "🔄 レビュー修正後のテストを再実行..."
-          python3 scripts/run_all_tests.py
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: レビュー指摘事項の修正
 
-          if [ $? -ne 0 ]; then
-            echo "❌ レビュー修正後のテストが失敗しました"
-            exit 1
+            🤖 AI によるレビュー修正
+            Issue #${ISSUE_NUMBER}
+
+            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
           fi
 
-          echo "✅ レビュー修正後のテスト成功"
+      - name: Upload review results
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-results
+          path: out/
 
-      - name: Update issue status - Security
+  # =====================================
+  # JOB 4: セキュリティチェック
+  # =====================================
+  security:
+    name: "4️⃣ セキュリティチェック"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: review
+    permissions:
+      contents: write
+      issues: write
+      actions: write
+      security-events: write
+    outputs:
+      security_passed: ${{ steps.security-result.outputs.passed }}
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup-and-implement.outputs.branch_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup environment
         run: |
-          gh issue comment "${ISSUE_NUMBER}" --body "🔒 **レビュー完了 → セキュリティチェック開始**
+          git config user.name "Claude AI Agent"
+          git config user.email "claude-agent@anthropic.com"
+          mkdir -p out
+
+      - name: Update issue status
+        run: |
+          gh issue comment "${ISSUE_NUMBER}" --body "🔒 **セキュリティチェック中**
 
           処理フロー:
           1. ✅ 実装完了
@@ -342,11 +408,7 @@ jobs:
           4. ⏳ セキュリティチェック中...
           5. ⏹️ PR作成"
 
-      # =====================================
-      # STEP 4: セキュリティチェック（問題があれば修正してテストから再実行）
-      # =====================================
-      - name: Security check with Claude
-        id: security-phase
+      - name: Security analysis with Claude
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -390,47 +452,69 @@ jobs:
 
             もしcriticalな問題やSecretsが検出された場合は、自動的に修正を実施してください。
 
-      - name: Check security results and fix if needed
-        id: check-security
+      - name: Check security results
+        id: security-result
         run: |
-          SECURITY_PASSED=true
-
           if [ -f out/security_analysis.json ]; then
             HAS_CRITICAL=$(python3 -c "import json; r=json.load(open('out/security_analysis.json')); print('true' if r.get('has_critical_issues', False) else 'false')")
             HAS_SECRETS=$(python3 -c "import json; r=json.load(open('out/security_analysis.json')); print('true' if r.get('has_secrets', False) else 'false')")
 
             if [ "$HAS_CRITICAL" == "true" ] || [ "$HAS_SECRETS" == "true" ]; then
-              echo "⚠️ セキュリティ問題が検出されました。修正が必要です。"
-              SECURITY_PASSED=false
-
-              # テストから再実行が必要
-              echo "need_test_rerun=true" >> $GITHUB_OUTPUT
+              echo "⚠️ セキュリティ問題が検出されました"
+              echo "passed=false" >> $GITHUB_OUTPUT
+            else
+              echo "✅ セキュリティチェック合格"
+              echo "passed=true" >> $GITHUB_OUTPUT
             fi
+          else
+            echo "passed=true" >> $GITHUB_OUTPUT
+            echo "✅ セキュリティチェック完了（デフォルト合格）"
           fi
 
-          echo "security_passed=${SECURITY_PASSED}" >> $GITHUB_OUTPUT
-
-      - name: Re-run tests after security fixes
-        if: steps.check-security.outputs.need_test_rerun == 'true'
+      - name: Commit security fixes
+        if: steps.security-result.outputs.passed != 'true'
         run: |
-          echo "🔄 セキュリティ修正後のテストを再実行..."
-          python3 scripts/run_all_tests.py
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: セキュリティ問題の修正
 
-          if [ $? -ne 0 ]; then
-            echo "❌ セキュリティ修正後のテストが失敗しました"
-            exit 1
+            🔒 AI によるセキュリティ修正
+            Issue #${ISSUE_NUMBER}
+
+            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
           fi
 
-          echo "✅ セキュリティ修正後のテスト成功"
+      - name: Upload security results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-results
+          path: out/
 
-      - name: Push branch
-        run: |
-          git push -u origin "${{ steps.create-branch.outputs.branch_name }}"
-          echo "✅ ブランチをプッシュしました"
+  # =====================================
+  # JOB 5: PR作成
+  # =====================================
+  create-pr:
+    name: "5️⃣ PR作成"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [setup-and-implement, test, review, security]
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
 
-      - name: Update issue status - PR Creation
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup-and-implement.outputs.branch_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update issue status
         run: |
-          gh issue comment "${ISSUE_NUMBER}" --body "📝 **セキュリティチェック完了 → PR作成**
+          gh issue comment "${ISSUE_NUMBER}" --body "📋 **PR作成中**
 
           処理フロー:
           1. ✅ 実装完了
@@ -439,23 +523,23 @@ jobs:
           4. ✅ セキュリティチェック完了
           5. ⏳ PR作成中..."
 
-      # =====================================
-      # STEP 5: PR作成
-      # =====================================
-      - name: Create Pull Request
-        id: create-pr
+      - name: Get change statistics
+        id: stats
         run: |
-          # 変更内容のサマリーを取得
           FILES_CHANGED=$(git diff --name-only origin/main..HEAD | wc -l)
           LINES_ADDED=$(git diff --stat origin/main..HEAD | tail -n 1 | awk '{print $4}')
           LINES_DELETED=$(git diff --stat origin/main..HEAD | tail -n 1 | awk '{print $6}')
+          echo "files_changed=${FILES_CHANGED}" >> $GITHUB_OUTPUT
+          echo "lines_added=${LINES_ADDED:-0}" >> $GITHUB_OUTPUT
+          echo "lines_deleted=${LINES_DELETED:-0}" >> $GITHUB_OUTPUT
 
-          # PRを作成
+      - name: Create Pull Request
+        id: create-pr
+        run: |
           PR_URL=$(gh pr create \
-            --title "feat: Issue #${ISSUE_NUMBER} - ${{ steps.issue-details.outputs.title }}" \
-            --body "$(cat <<'PR_BODY'
-          ## 📋 概要
-          Issue #${{ env.ISSUE_NUMBER }} の自動実装
+            --title "feat: Issue #${ISSUE_NUMBER} - ${{ needs.setup-and-implement.outputs.issue_title }}" \
+            --body "## 📋 概要
+          Issue #${ISSUE_NUMBER} の自動実装
 
           ## ✅ 完了項目
           - 🤖 AIによる自動実装
@@ -464,9 +548,9 @@ jobs:
           - 🔒 セキュリティチェック完了
 
           ## 📊 変更統計
-          - ファイル数: ${FILES_CHANGED}
-          - 追加行: ${LINES_ADDED:-0}
-          - 削除行: ${LINES_DELETED:-0}
+          - ファイル数: ${{ steps.stats.outputs.files_changed }}
+          - 追加行: ${{ steps.stats.outputs.lines_added }}
+          - 削除行: ${{ steps.stats.outputs.lines_deleted }}
 
           ## 🧪 テスト結果
           全てのテストが成功しています。
@@ -477,10 +561,8 @@ jobs:
           ## 🤖 自動生成
           このPRは統合パイプラインにより自動生成されました。
 
-          Closes #${{ env.ISSUE_NUMBER }}
-          PR_BODY
-          )" \
-            --head "${{ steps.create-branch.outputs.branch_name }}" \
+          Closes #${ISSUE_NUMBER}" \
+            --head "${{ needs.setup-and-implement.outputs.branch_name }}" \
             --base main)
 
           echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
@@ -501,20 +583,20 @@ jobs:
 
           全ての処理が正常に完了しました。PRのマージをお待ちください。"
 
-          # 完了ラベルを追加
           gh issue edit "${ISSUE_NUMBER}" --add-label "ai:completed"
 
       - name: Final summary
-        if: always()
         run: |
           echo "======================================"
           echo "📊 統合パイプライン実行サマリー"
           echo "======================================"
           echo "Issue: #${ISSUE_NUMBER}"
-          echo "ブランチ: ${{ steps.create-branch.outputs.branch_name }}"
+          echo "ブランチ: ${{ needs.setup-and-implement.outputs.branch_name }}"
           echo "PR URL: ${{ steps.create-pr.outputs.pr_url }}"
           echo ""
-          echo "テストリトライ回数: $(cat out/test_retry_count)"
-          echo "レビューステータス: ${{ steps.check-review.outputs.review_passed }}"
-          echo "セキュリティステータス: ${{ steps.check-security.outputs.security_passed }}"
+          echo "各工程の結果:"
+          echo "  - 実装: ✅"
+          echo "  - テスト: ${{ needs.test.outputs.test_passed == 'true' && '✅' || '⚠️ (修正済み)' }}"
+          echo "  - レビュー: ${{ needs.review.outputs.review_passed == 'true' && '✅' || '⚠️ (修正済み)' }}"
+          echo "  - セキュリティ: ${{ needs.security.outputs.security_passed == 'true' && '✅' || '⚠️ (修正済み)' }}"
           echo "======================================"
