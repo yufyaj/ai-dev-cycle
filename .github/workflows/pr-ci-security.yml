@@ -163,9 +163,9 @@ jobs:
         run: |
           gh pr comment "${PR_NUMBER}" --body "⚠️ **PRサイズが大きすぎます**
 
-CLAUDE.mdの原則により、PRサイズは **10ファイル/500行以内** に制限されています。
+          CLAUDE.mdの原則により、PRサイズは **10ファイル/500行以内** に制限されています。
 
-このPRを複数の小さなPRに分割してください。"
+          このPRを複数の小さなPRに分割してください。"
 
   all-checks-pass:
     name: All Checks Pass
@@ -190,11 +190,11 @@ CLAUDE.mdの原則により、PRサイズは **10ファイル/500行以内** に
         run: |
           gh pr comment "${PR_NUMBER}" --body "✅ **全てのCI/Security チェックが成功しました**
 
-- ✅ Lint & Type Check
-- ✅ ユニット/コンポーネントテスト
-- ✅ E2Eテスト（Playwright）
-- ✅ AIレビュー
-- ✅ CodeQLセキュリティスキャン
-- ✅ PRサイズチェック
+          - ✅ Lint & Type Check
+          - ✅ ユニット/コンポーネントテスト
+          - ✅ E2Eテスト（Playwright）
+          - ✅ AIレビュー
+          - ✅ CodeQLセキュリティスキャン
+          - ✅ PRサイズチェック
 
-**次のステップ**: 人間によるレビュー・承認をお願いします。"
+          **次のステップ**: 人間によるレビュー・承認をお願いします。"
