@@ -1,8 +1,8 @@
-
-# CLAUDE Rules — Kotlin Spring Boot + Clean Architecture / Next.js App Router (BFF) / Modern Frontend Best Practices
+# CLAUDE Rules — Architecture-First / Tech-Agnostic
 
 あなたはこのリポジトリにおいて、AIエンジニア兼レビュワーとして開発に参加します。  
-要件は Issue で管理し、クリティカルパス順に小さな単位で自動実装を進めます。
+要件は Issue で管理し、クリティカルパス順に小さな単位で自動実装を進めます。  
+**技術固有の情報はこのファイルに記載しない**。実装方針・構成・コマンドは `profiles/` 配下のスタックプロファイルに従います。
 
 ---
 
@@ -11,147 +11,108 @@
 - 実装は **TDD**（テスト駆動）を原則とし、PRにはテストを含める。
 - 不明確な仕様は勝手に拡張せず、PR本文に補足・提案を記載。
 - Secrets や認証情報はリポジトリに含めない。
-- Clean Architecture に従い、**責務の境界を超える実装はしない**。
+- **責務境界を超える実装は禁止**。
 
 ---
 
-## 🧱 1. 技術スタック
-- **フロントエンド**：
-  - Next.js 15（App Router）
-  - TypeScript
-  - Vitest
-  - Zod（スキーマ検証）
-- **バックエンド**：
-  - Kotlin
-  - Spring Boot
-  - Gradle Kotlin DSL
-  - JUnit5 + MockK
-- **アーキテクチャ**：
-  - BFFは「中継のみ」
-  - ドメインロジックはSpring Boot側で完結
-  - フロントは UI 表示と最小限の変換・検証のみ
+## 🧱 1. アーキテクチャ原則（抽象）
+
+### レイヤー境界
+- **UI層**：表示と最小限の入力検証
+- **BFF層**：認証・トレース・軽微な整形などの「中継のみ」
+- **アプリケーション層（ユースケース）**：ビジネスロジックの中核
+- **ドメイン層**：フレームワーク非依存の純粋ロジック
+- **インフラ層**：外部依存（DB、外部API、IO）
+
+### 境界の原則
+- 外部I/Fとの境界は DTO を介して明確にする
+- 上位層は下位層の契約にのみ依存し、実装に依存しない
+- 依存方向は常に内向き（UI→BFF→アプリケーション→ドメイン）
 
 ---
 
-## 🧠 2. バックエンド設計（Clean Architecture）
-```
+## 🧠 2. 実装原則（技術非依存）
 
-backend/
-domain/            # Entity / VO / Domain Services（純粋ロジック）
-usecase/           # Applicationサービス（Ports）
-interface/         # Adapters（Controller, DTO, Mapper）
-infrastructure/    # 外部依存（DB, API, Repository実装）
-
-```
-
-- **依存方向**：`infrastructure` → `interface` → `usecase` → `domain`（逆方向は禁止）
-- Controller は UseCase だけを呼び出し、DTOで外部との境界を明確にする。
-- domain層はSpring依存を含まない。
+- ディレクトリ構成はスタックプロファイルで規定するが、責務の物理分離は必須。
+- コントローラ／ハンドラはユースケースのみ呼び出す。
+- ドメインは他レイヤーを参照しない。
+- テストは正常系・異常系をセットで実施する。
 
 ---
 
-## 🌐 3. フロントエンド設計（App Router + BFF）
-```
+## 🌐 3. フロントエンド方針（抽象）
 
-frontend/
-app/
-api/                # BFF: route.ts（中継）
-features/             # UI・状態・ViewModel
-shared/
-lib/bff/            # fetch処理、trace伝搬、認証ヘッダ統一
-ui/                 # 共通UI
-config/             # envなど
-types/              # API契約
-
-```
-
-- BFFでは **認証・トレース・軽微な整形・スキーマ検証** のみ。
-- ビジネスロジックはバックエンドに集約。
-- DTO → ViewModel変換は `features/*/viewmodels` に限定。
-- UIは `shared/ui` で統一されたデザインシステムを利用する。
+- UIは表示とローカル状態管理に責務を限定。
+- BFFは中継層として認証、トレース伝搬、軽微な整形、入力検証のみを担う。
+- 型と契約は1か所で管理し、UI層とBFFで不整合を起こさない。
+- グローバルストアの乱用は禁止。局所状態とサーバー状態を明確に分離。
 
 ---
 
-## 🧪 4. テスト
-- すべてのPRに **正常系＋異常系** テストを含める。
-- **バックエンド**：JUnit5 + MockK
-  - Domain → Unit
-  - Usecase → Portモック
-  - Controller → MockMvc
-- **フロントエンド**：Vitest
-  - コンポーネント単体
-  - BFF route契約テスト（msw推奨）
-- テスト実行：
-  - `npm run test:ci` (FE)
-  - `./gradlew test` (BE)
+## 🧪 4. テスト方針（抽象）
+
+- すべてのPRに正常系＋異常系テストを含める。
+- 各レイヤーはユニットテスト可能な構造にする。
+- インタフェース層はI/O透過性のテストを実施。
+- テスト実行方法やツールはスタックプロファイルに従う。
 
 ---
 
-## ⚡ 5. フロントエンド ベストプラクティス
-- App Router + RSC を活用し、**初期ロード軽量化** を最優先。
-- 動的import / 遅延Hydration で不要JSを削減。
-- `bffFetch` に共通ヘッダ（auth, trace, timeout）とキャッシュ戦略を集約。
-- DTO検証には zod を使用し、壊れたレスポンスをUIに流さない。
-- API契約型は OpenAPI から生成するか `shared/types/api` に統一管理。
-- 状態管理はローカルとサーバー状態を明確に分離。グローバルストア乱用は禁止。
-- `error.tsx` を用いた共通エラーハンドリングを必須化。
+## 🔐 5. セキュリティ・信頼性
 
----
-
-## 🔐 6. セキュリティ・信頼性
-- XSS / CSRF対策を初期設計に含める。
-- 認証情報は HttpOnly Cookie。BFFで Authorization ヘッダに変換。
-- BFFで `traceparent` / `x-request-id` を前方伝播。
+- XSS / CSRF 対策を初期設計に含める。
+- 認証情報はサーバーサイドで安全に取り扱う。
+- トレーシング（traceparent等）を全層で前方伝搬する。
 - CSP / HTTPS / セキュアヘッダを有効化。
-- CodeQL で静的解析（JS & Kotlin）。
-- Secretsは絶対にコミットしない。
+- Secretsはバージョン管理に含めない。
 
 ---
 
-## 🕵️ 7. 観測性
-- すべてのリクエストに `traceparent` を付与。
-- UIエラーは ErrorBoundary + ログ送信（Sentry等）を想定。
-- Lighthouse / Web Vitals で Core Web Vitals(LCP, CLS, INP) をモニタ。
-- BFFログとBEログをトレースIDで紐づけられるように実装。
+## 🕵️ 6. 観測性
+
+- 全リクエストに一意のトレースIDを付与。
+- BFFとバックエンドでログ相関可能にする。
+- UI層ではエラーバウンダリとログ転送を活用。
+- パフォーマンスとUXの主要メトリクス（例：Web Vitals）を監視対象に含める。
 
 ---
 
-## 🧰 8. コーディング規約
+## 🧰 7. コーディング規約（共通）
+
 - **ブランチ名**：`ai/cp-<issue-number>`
-- **PRタイトル**：`feat: ...` or `fix: ...`
-- **PR本文**：
+- **PRタイトル**：`feat: ...` または `fix: ...`
+- **PR本文**（必須）：
   - ✅ 目的
-  - 🧭 設計（責務・レイヤーの位置づけ）
+  - 🧭 設計（責務・レイヤー位置）
   - 🧪 テスト観点
-  - ⚠️ リスク・影響範囲
+  - ⚠️ 影響範囲
   - 🔁 ロールバック手順
-- フロントは ESLint、バックエンドは ktlint 準拠。
-- ファイル命名：コンポーネントは PascalCase、ロジックは camelCase。
 - 依存注入は明示的に。暗黙依存は禁止。
+- 具体的なLint/Formatter/CIルールはスタックプロファイルに従う。
 
 ---
 
-## 🔁 9. CI失敗時の対応
-- Lint / Test / CodeQL が失敗した場合：
-  - Claudeはログを読み、修正コミットを追加。
-  - 成功するまで自動で再試行。
-- 不明確な失敗はPR本文に補足を追加して止める。
+## 🔁 8. CI失敗時の対応
+
+- Lint / Test / Static Analysis が失敗した場合：
+  - Claudeはログを読み、修正コミットを追加して再試行する。
+  - 不明確な失敗は PR 本文に補足し、最小実装に留める。
 
 ---
 
-## 🧼 10. 禁止事項
+## 🧼 9. 禁止事項
+
 - 巨大PR（>500行）
-- ビジネスロジックをBFFやUI層に置く
-- ドメイン層からフレームワーク参照
-- Secretsのコミット
-- DTOをUI層でそのまま使う
-- 型のないAPI呼び出し
+- ビジネスロジックを BFF や UI 層に置くこと
+- ドメイン層からフレームワークを参照すること
+- Secrets のコミット
+- 型や契約のない API 呼び出し
 
 ---
 
-## 📌 11. 参考
-- Kotlin コーディング規約: https://kotlinlang.org/docs/coding-conventions.html
-- Spring Boot 公式: https://spring.io/projects/spring-boot
-- Next.js App Router Docs: https://nextjs.org/docs
+## 📌 10. 参照
+
+- 技術スタック・ディレクトリ構成・ツール／コマンド：
+  → `profiles/stack_*.md` を参照
 - Clean Architecture（Robert C. Martin）
-- Web Vitals: https://web.dev/vitals/
+- Web Vitals（UX監視指標）

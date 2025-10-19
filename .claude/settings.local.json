@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh api repos/yufyaj/ai-dev-cycle/actions/workflows/199002175)",
+      "Bash(python3 -m json.tool)",
+      "Bash(git add .github/workflows/implement-issue.yml)",
+      "Bash(git commit -m \"fix: implement-issue.ymlのYAML構文エラーを修正\n\n複数行のコミットメッセージでYAML構文エラーが発生していた問題を修正。\nHEREDOCを使用して正しく文字列を扱うように変更。\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\")",
+      "Bash(git push origin main)",
+      "Bash(gh run view 18619454887 --log)",
+      "Bash(gh run view 18623373118 --log-failed)",
+      "Bash(gh run view 18623373085 --log-failed)",
+      "Bash(gh run view 18623373085)",
+      "Bash(gh run view 18623373031)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

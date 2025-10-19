@@ -14,3 +14,7 @@ Claude（Max）とGitHub Actionsで「実装→テスト→セキュリティ→
 ## セットアップ最短
 - Claude（Max）にログインして、このリポジトリへ GitHub App をインストール
 - `Actions` で「01 Plan Issues」を実行 → 「02 Orchestrate Next」を実行
+
+## memo
+ワークフローの権限付与
+gh api --method PUT repos/yufyaj/ai-dev-cycle/actions/permissions/workflow -f default_workflow_permissions=write
