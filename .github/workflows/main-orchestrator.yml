@@ -23,7 +23,7 @@ jobs:
       issues: write
       contents: write
       pull-requests: write
-      actions: write
+      actions: write  # ワークフローのdispatch権限
 
     steps:
       - name: Checkout repository
