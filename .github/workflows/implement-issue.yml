@@ -7,6 +7,8 @@ on:
         description: '実装するIssue番号'
         required: true
         type: string
+  repository_dispatch:
+    types: [implement-issue]
 
 jobs:
   implement:
@@ -55,7 +57,7 @@ jobs:
         id: issue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number || github.event.client_payload.issue_number }}
         run: |
           mkdir -p out
           python3 << 'EOF'
@@ -83,7 +85,7 @@ jobs:
 
       - name: Create implementation branch
         env:
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number || github.event.client_payload.issue_number }}
         run: |
           BRANCH_NAME="ai/cp-${ISSUE_NUMBER}"
 
@@ -101,7 +103,7 @@ jobs:
       - name: Run Claude Code implementation
         id: implement
         env:
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number || github.event.client_payload.issue_number }}
         run: |
           bash scripts/claude_implement.sh "${ISSUE_NUMBER}"
 
@@ -125,7 +127,7 @@ jobs:
 
       - name: Commit and push changes
         env:
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number || github.event.client_payload.issue_number }}
         run: |
           git add .
           git commit -m "feat: Issue #${ISSUE_NUMBER}の実装
@@ -139,7 +141,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>" || echo "変更がありませ�
       - name: Create Pull Request
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number || github.event.client_payload.issue_number }}
         run: |
           # Issue情報を取得
           ISSUE_TITLE=$(jq -r '.title' out/current_issue.json)
@@ -164,7 +166,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>" \
         if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number || github.event.client_payload.issue_number }}
         run: |
           gh issue comment "${ISSUE_NUMBER}" --body "🚀 実装が完了しました。PRをご確認ください。
 
@@ -176,7 +178,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>" \
         if: failure()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number || github.event.client_payload.issue_number }}
         run: |
           gh issue comment "${ISSUE_NUMBER}" --body "⚠️ 実装中にエラーが発生しました。
 
