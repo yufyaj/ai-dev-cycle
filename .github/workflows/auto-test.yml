@@ -56,7 +56,12 @@ jobs:
 
           # Node.js プロジェクトの場合
           if [ -f package.json ]; then
-            npm ci
+            # package-lock.jsonがある場合はnpm ci、ない場合はnpm install
+            if [ -f package-lock.json ]; then
+              npm ci
+            else
+              npm install
+            fi
           fi
 
       - name: Update issue status
@@ -76,10 +81,13 @@ jobs:
         continue-on-error: true
         run: |
           echo "🧪 テストを実行します..."
+
+          # テスト実行と結果の保存
           python3 scripts/run_all_tests.py
+          TEST_EXIT_CODE=$?
 
           # テスト結果を確認
-          if [ $? -eq 0 ]; then
+          if [ $TEST_EXIT_CODE -eq 0 ]; then
             echo "test_passed=true" >> $GITHUB_OUTPUT
             echo "✅ すべてのテストに成功しました"
           else

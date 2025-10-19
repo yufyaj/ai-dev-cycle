@@ -212,6 +212,11 @@ def main():
     project_types = detect_project_type()
     if not project_types:
         print("⚠️ プロジェクトタイプを検出できませんでした")
+        print("ℹ️ テストをスキップします（成功として扱います）")
+        # outディレクトリとダミーファイルを作成
+        os.makedirs('out', exist_ok=True)
+        with open('out/test_results.log', 'w') as f:
+            f.write("No tests found - skipping\n")
         # 何もテストがない場合は成功として扱う
         sys.exit(0)
 
