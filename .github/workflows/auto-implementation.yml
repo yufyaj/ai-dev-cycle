@@ -8,19 +8,18 @@ on:
         required: true
         type: string
 
-env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
 jobs:
   implement:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      issues: write
       contents: write
       pull-requests: write
-      actions: write
+      issues: write
+      actions: read  # CI/CDの失敗分析用
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -34,63 +33,23 @@ jobs:
           git config user.name "Claude AI Agent"
           git config user.email "claude-agent@anthropic.com"
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: |
-          pip install PyGithub requests
-
-          # Node.js 依存関係のインストール（存在する場合）
-          if [ -f package.json ]; then
-            npm ci
-          fi
-
       - name: Get Issue details
         id: issue-details
         env:
           ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
         run: |
-          mkdir -p out
-          python3 << 'EOF'
-          import os, json
-          from github import Github
+          # Issue情報を取得してJSONファイルに保存
+          gh issue view "${ISSUE_NUMBER}" --json number,title,body,labels > issue.json
 
-          g = Github(os.environ['GITHUB_TOKEN'])
-          repo = g.get_repo(os.environ['GITHUB_REPOSITORY'])
-          issue = repo.get_issue(int(os.environ['ISSUE_NUMBER']))
+          # Issue情報を環境変数に設定
+          TITLE=$(jq -r '.title' issue.json)
+          BODY=$(jq -r '.body // ""' issue.json)
+          echo "title=${TITLE}" >> $GITHUB_OUTPUT
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "${BODY}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-          # Issue 情報を取得
-          issue_data = {
-            'number': issue.number,
-            'title': issue.title,
-            'body': issue.body,
-            'labels': [label.name for label in issue.labels]
-          }
-
-          # 優先度を抽出
-          priority = 'P2'  # デフォルト
-          if issue.body and 'P0' in issue.body:
-            priority = 'P0'
-          elif issue.body and 'P1' in issue.body:
-            priority = 'P1'
-
-          issue_data['priority'] = priority
-
-          # ファイルに保存
-          with open('out/current_issue.json', 'w', encoding='utf-8') as f:
-            json.dump(issue_data, f, ensure_ascii=False, indent=2)
-
-          print(f"📋 Issue #{issue.number}: {issue.title}")
-          print(f"🎯 優先度: {priority}")
-          EOF
+          echo "📋 Issue #${ISSUE_NUMBER}: ${TITLE}"
 
       - name: Create implementation branch
         env:
@@ -125,11 +84,30 @@ jobs:
           - 💻 コード生成
           - 🧪 テストコード生成（TDD）"
 
-      - name: Auto implementation with Claude
-        env:
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
-        run: |
-          python3 scripts/claude_auto_implement.py
+      - name: Claude Implementation
+        uses: anthropics/claude-code-action@beta
+        with:
+          # OAuth token使用（MAX契約）
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+          # promptで自動実装（@claude不要）
+          prompt: |
+            Issue #${{ github.event.inputs.issue_number }} を実装してください。
+
+            タイトル: ${{ steps.issue-details.outputs.title }}
+
+            内容:
+            ${{ steps.issue-details.outputs.body }}
+
+            以下の要件を守ってください：
+            1. CLAUDE.mdのルールを厳守
+            2. TDD原則でテストコードも実装
+            3. PRサイズは10ファイル/500行以内
+            4. 責務分離を遵守（レイヤー境界を守る）
+            5. セキュリティを考慮（Secretsをコミットしない）
+
+            必要なファイルを作成・編集して、実装を完成させてください。
 
       - name: Check implementation results
         id: check-impl

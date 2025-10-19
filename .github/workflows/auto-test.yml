@@ -101,59 +101,53 @@ jobs:
 
       - name: Fix test failures with Claude
         if: steps.run-tests.outputs.test_passed == 'false'
-        env:
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
-        run: |
-          echo "🔧 テスト失敗を自動修正中..."
+        uses: anthropics/claude-code-action@beta
+        with:
+          # OAuth token使用（MAX契約）
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
-          python3 << 'EOF'
-          import os
-          import json
-          import subprocess
-          from anthropic import Anthropic
+          # promptで自動修正（@claude不要）
+          prompt: |
+            テストが失敗しました。エラーを修正してください。
 
-          # テストエラーログを取得
-          test_log = subprocess.run(['cat', 'out/test_results.log'],
-                                   capture_output=True, text=True).stdout
+            Issue #${{ github.event.inputs.issue_number }}
+            ブランチ: ${{ github.event.inputs.branch_name }}
 
-          # Claude APIで修正を試みる
-          client = Anthropic(api_key=os.environ['CLAUDE_CODE_OAUTH_TOKEN'])
+            以下の手順で修正を実施してください：
+            1. out/test_results.log ファイルからテストエラーログを確認
+            2. エラーの原因を特定
+            3. CLAUDE.mdのルールに従って修正コードを生成
+            4. TDD原則に基づいて修正（テストが通るように実装を修正）
+            5. 修正したファイルを保存
 
-          prompt = f"""
-          以下のテストエラーを修正してください:
-
-          {test_log}
-
-          CLAUDE.mdのルールに従い、以下を実施:
-          1. エラーの原因を特定
-          2. 修正コードを生成
-          3. TDD原則に基づく修正
-
-          修正内容をJSON形式で返してください:
-          {{
-            "files_to_fix": [
-              {{"path": "file_path", "content": "fixed_content"}}
-            ],
-            "explanation": "修正の説明"
-          }}
-          """
-
-          # ここでClaude APIを呼び出して修正を取得
-          # 実装は簡略化
-
-          print("修正を適用中...")
-          EOF
-
-          # 修正を再度コミット
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "fix: テスト失敗の自動修正
+            修正が完了したら、変更内容をコミットしてください：
+            - git add .
+            - git commit -m "fix: テスト失敗の自動修正
 
             🤖 AI によるテスト修正
-            Issue #${ISSUE_NUMBER}
+            Issue #${{ github.event.inputs.issue_number }}
+
+            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
+            - git push
+
+      - name: Check fix status
+        if: steps.run-tests.outputs.test_passed == 'false'
+        run: |
+          # 修正がコミットされたか確認
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "⚠️ 未コミットの変更があります"
+            git add .
+            git commit -m "fix: テスト失敗の追加修正
+
+            🤖 AI によるテスト修正
+            Issue #${{ github.event.inputs.issue_number }}
 
             Co-authored-by: Claude AI <claude-agent@anthropic.com>"
             git push
+            echo "✅ 追加修正をコミットしました"
+          else
+            echo "✅ 修正が完了しています"
           fi
 
       - name: Retry tests after fix
