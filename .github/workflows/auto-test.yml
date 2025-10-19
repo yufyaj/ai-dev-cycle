@@ -52,7 +52,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install PyGithub requests anthropic pytest pytest-cov
+          pip install PyGithub requests pytest pytest-cov
 
           # Node.js プロジェクトの場合
           if [ -f package.json ]; then

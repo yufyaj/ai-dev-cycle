@@ -46,7 +46,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install PyGithub requests anthropic
+          pip install PyGithub requests
 
           # Node.js 依存関係のインストール（存在する場合）
           if [ -f package.json ]; then

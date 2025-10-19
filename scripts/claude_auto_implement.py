@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-Claude API を使用してIssueから自動実装を行うスクリプト
+Claude CLI を使用してIssueから自動実装を行うスクリプト
 TDD原則に従い、テストコードも同時に生成
 """
 
 import os
 import json
 import sys
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional
-from anthropic import Anthropic
 
 
 def load_issue_data() -> Dict:
@@ -152,6 +153,55 @@ def apply_implementation(implementation: Dict) -> bool:
         return False
 
 
+def call_claude_cli(prompt: str, token: str) -> str:
+    """Claude CLIを呼び出してレスポンスを取得"""
+    # プロンプトを一時ファイルに保存
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+        f.write(prompt)
+        prompt_file = f.name
+
+    try:
+        # Claude CLIコマンドを構築
+        # 注: Claude CLIがまだ存在しない場合は、直接curlでAPIを呼ぶ代替実装
+        cmd = [
+            'curl', '-X', 'POST',
+            'https://api.anthropic.com/v1/messages',
+            '-H', 'Content-Type: application/json',
+            '-H', f'x-api-key: {token}',
+            '-H', 'anthropic-version: 2023-06-01',
+            '-d', json.dumps({
+                'model': 'claude-3-opus-20240229',
+                'max_tokens': 4000,
+                'temperature': 0.3,
+                'system': 'あなたは優秀なソフトウェアエンジニアです。TDD原則に従い、高品質なコードを生成します。必ず有効なJSON形式で出力してください。',
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': prompt
+                    }
+                ]
+            })
+        ]
+
+        # コマンド実行
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        if result.returncode != 0:
+            raise Exception(f"Claude CLI エラー: {result.stderr}")
+
+        return result.stdout
+
+    finally:
+        # 一時ファイルを削除
+        if os.path.exists(prompt_file):
+            os.unlink(prompt_file)
+
+
 def main():
     """メイン処理"""
     # 環境変数チェック
@@ -172,40 +222,32 @@ def main():
     claude_rules = load_claude_rules()
     stack_profile = load_stack_profile()
 
-    # Claude API 初期化
-    client = Anthropic(api_key=token)
-
     # プロンプト生成
     prompt = generate_implementation_prompt(issue_data, claude_rules, stack_profile)
 
     print("🤖 Claude による実装を開始...")
 
     try:
-        # Claude API 呼び出し
-        response = client.messages.create(
-            model="claude-3-opus-20240229",
-            max_tokens=4000,
-            temperature=0.3,
-            system="あなたは優秀なソフトウェアエンジニアです。TDD原則に従い、高品質なコードを生成します。必ず有効なJSON形式で出力してください。",
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        )
+        # Claude CLIを呼び出し
+        response_text = call_claude_cli(prompt, token)
 
-        # レスポンスからJSON部分を抽出
-        response_text = response.content[0].text
+        # APIレスポンスをパース
+        api_response = json.loads(response_text)
+
+        # Claude APIレスポンスからコンテンツを抽出
+        if 'content' in api_response and len(api_response['content']) > 0:
+            response_content = api_response['content'][0]['text']
+        else:
+            raise Exception("レスポンスにコンテンツが含まれていません")
 
         # JSON部分を抽出（```json ... ``` の間を取得）
         import re
-        json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+        json_match = re.search(r'```json\s*(.*?)\s*```', response_content, re.DOTALL)
         if json_match:
             json_str = json_match.group(1)
         else:
             # 全体がJSONの場合
-            json_str = response_text
+            json_str = response_content
 
         # JSONパース
         implementation = json.loads(json_str)
@@ -234,11 +276,12 @@ def main():
 
     except json.JSONDecodeError as e:
         print(f"❌ Claude のレスポンスのパースに失敗: {e}")
-        print(f"レスポンス: {response_text[:500]}...")
+        if 'response_content' in locals():
+            print(f"レスポンス: {response_content[:500]}...")
         sys.exit(1)
 
     except Exception as e:
-        print(f"❌ Claude API エラー: {e}")
+        print(f"❌ エラー: {e}")
         sys.exit(1)
 
 

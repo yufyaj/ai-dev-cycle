@@ -46,7 +46,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install PyGithub requests anthropic
+          pip install PyGithub requests
 
       - name: Update issue status
         env:
