@@ -1,4 +1,4 @@
-name: Task Executor
+name: Implement Issue
 
 on:
   workflow_dispatch:
