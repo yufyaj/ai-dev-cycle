@@ -191,8 +191,18 @@ def call_claude_cli(prompt: str, token: str) -> str:
             timeout=120
         )
 
+        # デバッグ情報を出力
         if result.returncode != 0:
-            raise Exception(f"Claude CLI エラー: {result.stderr}")
+            print(f"⚠️ curlコマンド失敗: {result.returncode}")
+            print(f"stderr: {result.stderr}")
+            print(f"stdout: {result.stdout}")
+            raise Exception(f"API呼び出しエラー: {result.stderr}")
+
+        # レスポンスを確認
+        if not result.stdout:
+            raise Exception("空のレスポンス")
+
+        print(f"📡 APIレスポンス受信: {len(result.stdout)} bytes")
 
         return result.stdout
 
@@ -232,12 +242,25 @@ def main():
         response_text = call_claude_cli(prompt, token)
 
         # APIレスポンスをパース
-        api_response = json.loads(response_text)
+        try:
+            api_response = json.loads(response_text)
+        except json.JSONDecodeError as e:
+            print(f"⚠️ APIレスポンスのパース失敗")
+            print(f"レスポンス: {response_text[:500]}")
+            raise Exception(f"APIレスポンスが無効なJSON: {e}")
+
+        # エラーレスポンスをチェック
+        if 'error' in api_response:
+            error_msg = api_response['error'].get('message', 'Unknown error')
+            error_type = api_response['error'].get('type', 'Unknown')
+            raise Exception(f"API Error [{error_type}]: {error_msg}")
 
         # Claude APIレスポンスからコンテンツを抽出
         if 'content' in api_response and len(api_response['content']) > 0:
             response_content = api_response['content'][0]['text']
         else:
+            print(f"⚠️ 予期しないレスポンス構造:")
+            print(json.dumps(api_response, indent=2)[:500])
             raise Exception("レスポンスにコンテンツが含まれていません")
 
         # JSON部分を抽出（```json ... ``` の間を取得）
