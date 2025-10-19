@@ -9,6 +9,11 @@ on:
         type: string
   repository_dispatch:
     types: [implement-issue]
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/implement-issue.yml'
 
 jobs:
   implement:
