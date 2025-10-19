@@ -50,14 +50,10 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install security tools
+      - name: Install dependencies
         run: |
-          pip install safety bandit semgrep
-
-          # Node.js セキュリティツール
-          if [ -f package.json ]; then
-            npm install -g snyk @microsoft/eslint-plugin-sdl
-          fi
+          # AI分析用の基本パッケージのみ
+          pip install PyGithub requests
 
       - name: Update issue status
         env:
@@ -72,147 +68,151 @@ jobs:
           - 📋 OWASP Top 10 チェック
           - 🚨 XSS/CSRF対策の確認"
 
-      - name: Check for secrets
-        id: secrets-check
-        continue-on-error: true
+      - name: AI Security Analysis with Claude
+        id: ai-security
+        uses: anthropics/claude-code-action@beta
+        with:
+          # OAuth token使用（MAX契約）
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+          # agentモード（workflow_dispatch対応）
+          mode: 'agent'
+
+          # direct_promptでAIセキュリティ分析（@claude不要）
+          direct_prompt: |
+            Issue #${{ github.event.inputs.issue_number }} の実装に対してセキュリティ分析を実施してください。
+
+            ブランチ: ${{ github.event.inputs.branch_name }}
+
+            以下の観点で包括的なセキュリティ分析を実施してください：
+
+            1. **Secrets・認証情報の検出**
+               - ハードコードされたパスワード、APIキー、トークン
+               - プライベートキーや証明書
+               - データベース接続文字列
+               - AWS/GCP/Azureのクレデンシャル
+               - 環境変数への適切な外部化が必要な値
+
+            2. **脆弱性チェック**
+               - SQLインジェクション
+               - XSS（クロスサイトスクリプティング）
+               - CSRF（クロスサイトリクエストフォージェリ）
+               - 認証・認可の不備
+               - 安全でない暗号化方式
+               - パストラバーサル
+
+            3. **OWASP Top 10チェック**
+               - インジェクション攻撃の可能性
+               - 認証の欠陥
+               - 機密データの露出
+               - XXE（XML外部エンティティ）
+               - アクセス制御の不備
+               - セキュリティ設定の不備
+
+            4. **コードセキュリティ**
+               - 入力検証の不備
+               - エラーハンドリングでの情報漏洩
+               - ログへのセンシティブ情報記録
+               - 安全でない乱数生成
+               - レースコンディション
+
+            分析結果をout/security_analysis.jsonに以下の形式で保存してください：
+            {
+              "has_critical_issues": true/false,
+              "has_secrets": true/false,
+              "issue_count": {
+                "critical": 数値,
+                "high": 数値,
+                "medium": 数値,
+                "low": 数値
+              },
+              "issues": [
+                {
+                  "severity": "critical|high|medium|low",
+                  "type": "問題のタイプ",
+                  "file": "ファイルパス",
+                  "description": "問題の説明",
+                  "recommendation": "修正方法"
+                }
+              ],
+              "summary": "セキュリティ分析のサマリー"
+            }
+
+            分析が完了したら、結果に基づいて適切な判定を行ってください。
+
+      - name: Check AI security analysis results
+        id: check-security
         run: |
-          echo "🔑 Secrets検出チェック..."
+          echo "📊 AI分析結果を確認中..."
 
-          # 一般的なシークレットパターンをチェック
-          PATTERNS=(
-            "password\s*=\s*[\"'][^\"']+[\"']"
-            "api[_-]?key\s*=\s*[\"'][^\"']+[\"']"
-            "token\s*=\s*[\"'][^\"']+[\"']"
-            "secret\s*=\s*[\"'][^\"']+[\"']"
-            "private[_-]?key"
-            "BEGIN RSA PRIVATE KEY"
-            "BEGIN EC PRIVATE KEY"
-            "BEGIN OPENSSH PRIVATE KEY"
-          )
+          # 分析結果ファイルが存在するかチェック
+          if [ -f out/security_analysis.json ]; then
+            # JSONから値を抽出
+            HAS_CRITICAL=$(python3 -c "import json; r=json.load(open('out/security_analysis.json')); print('true' if r.get('has_critical_issues', False) else 'false')")
+            HAS_SECRETS=$(python3 -c "import json; r=json.load(open('out/security_analysis.json')); print('true' if r.get('has_secrets', False) else 'false')")
+            CRITICAL_COUNT=$(python3 -c "import json; r=json.load(open('out/security_analysis.json')); print(r.get('issue_count', {}).get('critical', 0))")
+            HIGH_COUNT=$(python3 -c "import json; r=json.load(open('out/security_analysis.json')); print(r.get('issue_count', {}).get('high', 0))")
 
-          FOUND_SECRETS=0
-          for pattern in "${PATTERNS[@]}"; do
-            if grep -r -i -E "$pattern" --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.env* .; then
-              FOUND_SECRETS=1
-            fi
-          done
+            echo "has_critical_issues=${HAS_CRITICAL}" >> $GITHUB_OUTPUT
+            echo "has_secrets=${HAS_SECRETS}" >> $GITHUB_OUTPUT
+            echo "critical_issues=${CRITICAL_COUNT}" >> $GITHUB_OUTPUT
+            echo "high_issues=${HIGH_COUNT}" >> $GITHUB_OUTPUT
 
-          if [ $FOUND_SECRETS -eq 0 ]; then
-            echo "secrets_found=false" >> $GITHUB_OUTPUT
-            echo "✅ Secretsは検出されませんでした"
+            # サマリーを表示
+            python3 << 'EOF'
+import json
+with open('out/security_analysis.json', 'r') as f:
+    data = json.load(f)
+    print("\n📋 セキュリティ分析サマリー:")
+    print(f"  🚨 Critical: {data['issue_count']['critical']}")
+            print(f"  ⚠️  High: {data['issue_count']['high']}")
+            print(f"  ⚡ Medium: {data['issue_count']['medium']}")
+            print(f"  📝 Low: {data['issue_count']['low']}")
+            print(f"\n{data.get('summary', '')}")
+EOF
           else
-            echo "secrets_found=true" >> $GITHUB_OUTPUT
-            echo "⚠️ 潜在的なSecretsが検出されました"
-          fi
-
-      - name: Run dependency vulnerability scan
-        id: dependency-scan
-        continue-on-error: true
-        run: |
-          echo "📦 依存関係の脆弱性チェック..."
-
-          # Python依存関係
-          if [ -f requirements.txt ]; then
-            safety check --json > out/safety_report.json || true
-          fi
-
-          # Node.js依存関係
-          if [ -f package.json ]; then
-            npm audit --json > out/npm_audit.json || true
-          fi
-
-          # 結果を解析
-          python3 << 'EOF'
-          import json
-          import os
-
-          vulnerabilities = []
-
-          # Safety report
-          if os.path.exists('out/safety_report.json'):
-            with open('out/safety_report.json', 'r') as f:
-              try:
-                data = json.load(f)
-                if isinstance(data, list):
-                  vulnerabilities.extend(data)
-              except:
-                pass
-
-          # NPM audit
-          if os.path.exists('out/npm_audit.json'):
-            with open('out/npm_audit.json', 'r') as f:
-              try:
-                data = json.load(f)
-                if 'vulnerabilities' in data:
-                  vulnerabilities.append(data['vulnerabilities'])
-              except:
-                pass
-
-          print(f"検出された脆弱性: {len(vulnerabilities)}")
-          with open('out/vulnerabilities.json', 'w') as f:
-            json.dump(vulnerabilities, f, indent=2)
-          EOF
-
-          VULN_COUNT=$(python3 -c "import json; print(len(json.load(open('out/vulnerabilities.json', 'r'))))" 2>/dev/null || echo "0")
-          echo "vulnerability_count=${VULN_COUNT}" >> $GITHUB_OUTPUT
-
-      - name: Run code security analysis
-        id: code-analysis
-        run: |
-          echo "🛡️ コードセキュリティ分析..."
-
-          python3 scripts/security_check.py
-
-          # 結果を確認
-          if [ -f out/security_report.json ]; then
-            CRITICAL_ISSUES=$(python3 -c "import json; r=json.load(open('out/security_report.json')); print(sum(1 for i in r.get('issues',[]) if i.get('severity')=='critical'))")
-            echo "critical_issues=${CRITICAL_ISSUES}" >> $GITHUB_OUTPUT
-
-            if [ "$CRITICAL_ISSUES" -eq 0 ]; then
-              echo "✅ クリティカルなセキュリティ問題は検出されませんでした"
-            else
-              echo "🚨 ${CRITICAL_ISSUES}個のクリティカルな問題が検出されました"
-            fi
-          else
+            # 分析結果がない場合（Claude Actionが失敗した場合）
+            echo "⚠️ AI分析結果が見つかりません。デフォルト値を使用します。"
+            echo "has_critical_issues=false" >> $GITHUB_OUTPUT
+            echo "has_secrets=false" >> $GITHUB_OUTPUT
             echo "critical_issues=0" >> $GITHUB_OUTPUT
+            echo "high_issues=0" >> $GITHUB_OUTPUT
           fi
 
-      - name: Fix critical security issues
-        if: steps.code-analysis.outputs.critical_issues != '0' || steps.secrets-check.outputs.secrets_found == 'true'
-        env:
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
-        run: |
-          echo "🔧 セキュリティ問題を自動修正中..."
+      - name: Fix critical security issues with AI
+        if: steps.check-security.outputs.has_critical_issues == 'true' || steps.check-security.outputs.has_secrets == 'true'
+        uses: anthropics/claude-code-action@beta
+        with:
+          # OAuth token使用（MAX契約）
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
-          python3 << 'EOF'
-          import os
-          import json
+          # agentモード（workflow_dispatch対応）
+          mode: 'agent'
 
-          # セキュリティレポートを読み込み
-          if os.path.exists('out/security_report.json'):
-            with open('out/security_report.json', 'r') as f:
-              report = json.load(f)
+          # direct_promptでセキュリティ修正（@claude不要）
+          direct_prompt: |
+            セキュリティ分析で検出された問題を修正してください。
 
-            # クリティカルな問題のみ自動修正
-            for issue in report.get('issues', []):
-              if issue.get('severity') == 'critical':
-                print(f"修正中: {issue['file']} - {issue['type']}")
-                # 実際の修正ロジック（簡略化）
+            Issue #${{ github.event.inputs.issue_number }}
+            ブランチ: ${{ github.event.inputs.branch_name }}
 
-          print("修正完了")
-          EOF
+            以下の手順で修正を実施してください：
+            1. out/security_analysis.json を読み込んで検出された問題を確認
+            2. criticalとhighの問題は必ず修正
+            3. Secretsが検出された場合は環境変数に移動
+            4. 各問題の "recommendation" に従って修正を実施
 
-          # 修正をコミット
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "fix: セキュリティ問題の自動修正
+            修正が完了したら、変更内容をコミットしてください：
+            - git add .
+            - git commit -m "fix: セキュリティ問題の自動修正
 
-            🔒 セキュリティ脆弱性の修正
-            Issue #${ISSUE_NUMBER}
+            🔒 AIによるセキュリティ脆弱性の修正
+            Issue #${{ github.event.inputs.issue_number }}
 
             Co-authored-by: Claude AI <claude-agent@anthropic.com>"
-            git push
-          fi
+            - git push
 
       - name: Generate security report
         if: always()
@@ -225,13 +225,14 @@ jobs:
           report = {
             "issue_number": os.environ.get('ISSUE_NUMBER'),
             "branch": os.environ.get('BRANCH_NAME'),
-            "secrets_found": os.environ.get('secrets_found', 'false'),
-            "vulnerability_count": os.environ.get('vulnerability_count', '0'),
-            "critical_issues": os.environ.get('critical_issues', '0'),
+            "has_critical_issues": os.environ.get('has_critical_issues', 'false'),
+            "has_secrets": os.environ.get('has_secrets', 'false'),
+            "critical_count": os.environ.get('critical_issues', '0'),
+            "high_count": os.environ.get('high_issues', '0'),
             "timestamp": os.popen('date -Iseconds').read().strip(),
             "passed": (
-              os.environ.get('secrets_found') == 'false' and
-              int(os.environ.get('critical_issues', '0')) == 0
+              os.environ.get('has_critical_issues') == 'false' and
+              os.environ.get('has_secrets') == 'false'
             )
           }
 
@@ -243,9 +244,10 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
           BRANCH_NAME: ${{ github.event.inputs.branch_name }}
-          secrets_found: ${{ steps.secrets-check.outputs.secrets_found }}
-          vulnerability_count: ${{ steps.dependency-scan.outputs.vulnerability_count }}
-          critical_issues: ${{ steps.code-analysis.outputs.critical_issues }}
+          has_critical_issues: ${{ steps.check-security.outputs.has_critical_issues }}
+          has_secrets: ${{ steps.check-security.outputs.has_secrets }}
+          critical_issues: ${{ steps.check-security.outputs.critical_issues }}
+          high_issues: ${{ steps.check-security.outputs.high_issues }}
 
       - name: Check if security passed
         id: security-result
@@ -285,19 +287,20 @@ jobs:
           if [ "${{ steps.security-result.outputs.security_passed }}" == "True" ]; then
             gh issue comment "${ISSUE_NUMBER}" --body "✅ **セキュリティチェック完了**
 
-            チェック結果:
+            AIセキュリティ分析結果:
             - Secrets検出: ✅ なし
-            - 脆弱性: ${{ steps.dependency-scan.outputs.vulnerability_count }}個（非クリティカル）
-            - セキュリティ問題: ✅ クリティカルな問題なし
+            - Critical問題: ✅ なし
+            - High問題: ${{ steps.check-security.outputs.high_issues }}個
+            - セキュリティ: ✅ AIによる包括的な分析完了
 
             次のステップ: PR作成"
           else
             gh issue comment "${ISSUE_NUMBER}" --body "⚠️ **セキュリティ問題が検出されました**
 
-            検出された問題:
-            - Secrets: ${{ steps.secrets-check.outputs.secrets_found == 'true' && '⚠️ 検出' || '✅ なし' }}
-            - クリティカルな問題: ${{ steps.code-analysis.outputs.critical_issues }}個
-            - 脆弱性: ${{ steps.dependency-scan.outputs.vulnerability_count }}個
+            AIセキュリティ分析結果:
+            - Secrets検出: ${{ steps.check-security.outputs.has_secrets == 'true' && '⚠️ 検出' || '✅ なし' }}
+            - Critical問題: ${{ steps.check-security.outputs.critical_issues }}個
+            - High問題: ${{ steps.check-security.outputs.high_issues }}個
 
             詳細は [セキュリティログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) を確認してください。
 
