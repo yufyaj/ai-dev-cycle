@@ -189,7 +189,21 @@ jobs:
         run: |
           git config user.name "Claude AI Agent"
           git config user.email "claude-agent@anthropic.com"
+
+          # Python依存関係をインストール
           pip install PyGithub requests pytest pytest-cov
+
+          # Node.js依存関係をインストール（package.jsonが存在する場合）
+          if [ -f package.json ]; then
+            echo "📦 Node.jsプロジェクトを検出 - 依存関係をインストール"
+            if [ -f package-lock.json ]; then
+              echo "  package-lock.json使用: npm ci"
+              npm ci
+            else
+              echo "  package.json使用: npm install"
+              npm install
+            fi
+          fi
 
       - name: Download workspace
         uses: actions/download-artifact@v4
