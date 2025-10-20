@@ -1,6 +1,6 @@
 name: Auto Complete Pipeline
 
-on:
+'on':
   workflow_dispatch:
     inputs:
       issue_number:
@@ -429,21 +429,7 @@ jobs:
               echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
 
               # フィードバック情報を作成
-              python3 -c "
-import json
-with open('out/review_result.json') as f:
-    review = json.load(f)
-
-feedback = []
-feedback.append('レビューで以下のクリティカルな問題が検出されました:')
-for issue in review.get('issues', []):
-    if issue.get('severity') == 'critical':
-        feedback.append(f\"- {issue.get('description')} ({issue.get('file', 'N/A')})\")
-        feedback.append(f\"  推奨: {issue.get('suggestion', 'N/A')}\")
-
-with open('out/feedback.txt', 'w') as f:
-    f.write('\n'.join(feedback))
-"
+              python3 -c "import json; r=json.load(open('out/review_result.json')); fb=['レビューで以下のクリティカルな問題が検出されました:']; [fb.extend([f\"- {i.get('description')} ({i.get('file', 'N/A')})\", f\"  推奨: {i.get('suggestion', 'N/A')}\"]) for i in r.get('issues', []) if i.get('severity')=='critical']; open('out/feedback.txt', 'w').write('\n'.join(fb))"
             else
               echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
             fi
@@ -589,25 +575,7 @@ with open('out/feedback.txt', 'w') as f:
               echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
 
               # フィードバック情報を作成
-              python3 -c "
-import json
-with open('out/security_analysis.json') as f:
-    security = json.load(f)
-
-feedback = []
-feedback.append('セキュリティ分析で以下の重大な問題が検出されました:')
-for issue in security.get('issues', []):
-    if issue.get('severity') in ['critical']:
-        feedback.append(f\"- {issue.get('description')} ({issue.get('file', 'N/A')})\")
-        feedback.append(f\"  推奨: {issue.get('recommendation', 'N/A')}\")
-
-if security.get('has_secrets'):
-    feedback.append('- Secretsや認証情報のハードコーディングが検出されました')
-    feedback.append('  推奨: 環境変数またはGitHub Secretsを使用してください')
-
-with open('out/feedback.txt', 'w') as f:
-    f.write('\n'.join(feedback))
-"
+              python3 -c "import json; s=json.load(open('out/security_analysis.json')); fb=['セキュリティ分析で以下の重大な問題が検出されました:']; [fb.extend([f\"- {i.get('description')} ({i.get('file', 'N/A')})\", f\"  推奨: {i.get('recommendation', 'N/A')}\"]) for i in s.get('issues', []) if i.get('severity')=='critical']; fb.extend(['- Secretsや認証情報のハードコーディングが検出されました', '  推奨: 環境変数またはGitHub Secretsを使用してください']) if s.get('has_secrets') else None; open('out/feedback.txt', 'w').write('\n'.join(fb))"
             else
               echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
             fi
