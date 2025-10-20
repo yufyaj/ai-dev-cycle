@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: ai-dev-security
+  
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driverClassName: org.h2.Driver
+    username: sa
+    password: 
+  
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+  
+  h2:
+    console:
+      enabled: false
+
+server:
+  port: 8080
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: true
+        same-site: strict
+  
+  ssl:
+    enabled: false # Enable in production with proper certificates
+  
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+
+logging:
+  level:
+    com.aidev: INFO
+    org.springframework.security: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

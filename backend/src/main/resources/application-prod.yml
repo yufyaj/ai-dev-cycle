@@ -1,0 +1,63 @@
+spring:
+  application:
+    name: ai-dev-security
+  
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/aidev}
+    username: ${DATABASE_USERNAME:aidev}
+    password: ${DATABASE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    key-store: classpath:keystore.p12
+    key-store-password: ${SSL_KEYSTORE_PASSWORD}
+    key-store-type: PKCS12
+    key-alias: aidev
+  
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: true
+        same-site: strict
+  
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+
+logging:
+  level:
+    com.aidev: INFO
+    org.springframework.security: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: /var/log/aidev/application.log
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+    metrics:
+      enabled: true
+  server:
+    port: 8081
+    ssl:
+      enabled: false
