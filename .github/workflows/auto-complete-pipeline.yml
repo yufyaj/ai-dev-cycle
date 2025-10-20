@@ -597,6 +597,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [setup-and-implement, test, review, security]
+    if: |
+      always() &&
+      needs.test.result == 'success' &&
+      needs.review.result == 'success' &&
+      needs.security.result == 'success' &&
+      needs.test.outputs.needs_reimplementation != 'true' &&
+      needs.review.outputs.needs_reimplementation != 'true' &&
+      needs.security.outputs.needs_reimplementation != 'true'
     permissions:
       contents: write
       pull-requests: write
@@ -708,9 +716,11 @@ jobs:
     timeout-minutes: 5
     needs: [test, review, security]
     if: |
-      needs.test.outputs.needs_reimplementation == 'true' ||
-      needs.review.outputs.needs_reimplementation == 'true' ||
-      needs.security.outputs.needs_reimplementation == 'true'
+      always() && (
+        needs.test.outputs.needs_reimplementation == 'true' ||
+        needs.review.outputs.needs_reimplementation == 'true' ||
+        needs.security.outputs.needs_reimplementation == 'true'
+      )
     permissions:
       contents: read
       issues: write
