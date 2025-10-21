@@ -760,37 +760,46 @@ jobs:
       - name: Create Pull Request
         id: create-pr
         run: |
-          PR_URL=$(gh pr create \
-            --title "feat: Issue #${ISSUE_NUMBER} - ${{ needs.setup-and-implement.outputs.issue_title }}" \
-            --body "## 📋 概要
-          Issue #${ISSUE_NUMBER} の自動実装
+          # 既存のPRを確認
+          EXISTING_PR=$(gh pr list --head "${{ needs.setup-and-implement.outputs.branch_name }}" --base main --json url --jq '.[0].url' || echo "")
 
-          ## ✅ 完了項目
-          - 🤖 AIによる自動実装
-          - 🧪 単体テスト実行・成功
-          - 📝 コードレビュー完了
-          - 🔒 セキュリティチェック完了
+          if [ -n "$EXISTING_PR" ]; then
+            echo "✅ 既存のPRを使用: ${EXISTING_PR}"
+            PR_URL="$EXISTING_PR"
+          else
+            # 新規PR作成
+            PR_URL=$(gh pr create \
+              --title "feat: Issue #${ISSUE_NUMBER} - ${{ needs.setup-and-implement.outputs.issue_title }}" \
+              --body "## 📋 概要
+            Issue #${ISSUE_NUMBER} の自動実装
 
-          ## 📊 変更統計
-          - ファイル数: ${{ steps.stats.outputs.files_changed }}
-          - 追加行: ${{ steps.stats.outputs.lines_added }}
-          - 削除行: ${{ steps.stats.outputs.lines_deleted }}
+            ## ✅ 完了項目
+            - 🤖 AIによる自動実装
+            - 🧪 単体テスト実行・成功
+            - 📝 コードレビュー完了
+            - 🔒 セキュリティチェック完了
 
-          ## 🧪 テスト結果
-          全てのテストが成功しています。
+            ## 📊 変更統計
+            - ファイル数: ${{ steps.stats.outputs.files_changed }}
+            - 追加行: ${{ steps.stats.outputs.lines_added }}
+            - 削除行: ${{ steps.stats.outputs.lines_deleted }}
 
-          ## 🔒 セキュリティ
-          セキュリティチェックをパスしています。
+            ## 🧪 テスト結果
+            全てのテストが成功しています。
 
-          ## 🤖 自動生成
-          このPRは統合パイプラインにより自動生成されました。
+            ## 🔒 セキュリティ
+            セキュリティチェックをパスしています。
 
-          Closes #${ISSUE_NUMBER}" \
-            --head "${{ needs.setup-and-implement.outputs.branch_name }}" \
-            --base main)
+            ## 🤖 自動生成
+            このPRは統合パイプラインにより自動生成されました。
+
+            Closes #${ISSUE_NUMBER}" \
+              --head "${{ needs.setup-and-implement.outputs.branch_name }}" \
+              --base main)
+            echo "✅ PR作成完了: ${PR_URL}"
+          fi
 
           echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
-          echo "✅ PR作成完了: ${PR_URL}"
 
       - name: Update issue - Complete
         run: |
