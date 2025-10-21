@@ -807,7 +807,8 @@ jobs:
 
           全ての処理が正常に完了しました。PRのマージをお待ちください。"
 
-          gh issue edit "${ISSUE_NUMBER}" --add-label "ai:completed"
+          # ラベルを追加（存在しない場合はスキップ）
+          gh issue edit "${ISSUE_NUMBER}" --add-label "ai:completed" || echo "⚠️ ラベル 'ai:completed' が存在しません（スキップ）"
 
       - name: Final summary
         run: |
