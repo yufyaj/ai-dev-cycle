@@ -82,6 +82,7 @@ log/
 coverage/
 .nyc_output/
 test-results/
+playwright-report/
 junit.xml
 *.lcov
 
@@ -140,13 +141,14 @@ credentials/
 # Package managers lock files (optional)
 # =====================================
 # Uncomment if you want to ignore lock files
-# package-lock.json
+package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
 
 # =====================================
 # Output directories
 # =====================================
+out/
 output/
 outputs/
 artifacts/
