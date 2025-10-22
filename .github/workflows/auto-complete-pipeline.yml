@@ -1,6 +1,6 @@
 name: Auto Complete Pipeline
 
-'on':
+on:
   workflow_dispatch:
     inputs:
       issue_number:
