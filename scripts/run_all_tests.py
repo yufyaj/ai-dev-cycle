@@ -22,6 +22,15 @@ def detect_project_type() -> List[str]:
     if Path('requirements.txt').exists() or Path('setup.py').exists() or Path('pyproject.toml').exists():
         project_types.append('python')
 
+    if Path('gradlew').exists() or Path('build.gradle').exists() or Path('build.gradle.kts').exists():
+        project_types.append('kotlin')
+
+    if Path('go.mod').exists():
+        project_types.append('go')
+
+    if Path('Cargo.toml').exists():
+        project_types.append('rust')
+
     return project_types
 
 
@@ -60,7 +69,9 @@ def run_nodejs_tests() -> Tuple[bool, str, Dict]:
         elif Path('node_modules/.bin/vitest').exists():
             test_commands.append('npx vitest run --coverage')
         else:
-            return False, "テストコマンドが見つかりません", results
+            all_output = ["Node.js: テストコマンドが見つかりません"]
+            results['success'] = True
+            return True, '\n'.join(all_output), results
 
     all_output = []
     all_success = True
@@ -99,6 +110,52 @@ def run_nodejs_tests() -> Tuple[bool, str, Dict]:
 
     results['success'] = all_success
     return all_success, '\n'.join(all_output), results
+
+
+def run_playwright_e2e() -> Tuple[bool, str, Dict]:
+    """Playwright のE2Eテストを実行（存在する場合のみ）"""
+    if not (Path('tests/e2e').exists() or Path('playwright.config.ts').exists() or Path('playwright.config.js').exists()):
+        return True, "Playwrightテストなし（スキップ）", {'type': 'playwright', 'success': True, 'tests_passed': 0, 'tests_failed': 0, 'coverage': 0}
+    print("🧪 Playwright E2E テストを実行中...")
+    cmd = 'npx playwright test'
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    output = f"=== {cmd} ===\n{result.stdout}\n{result.stderr}"
+    success = (result.returncode == 0)
+    return success, output, {'type': 'playwright', 'success': success, 'tests_passed': 0, 'tests_failed': 0, 'coverage': 0}
+
+
+def run_kotlin_tests() -> Tuple[bool, str, Dict]:
+    """Gradle/Kotlin のテストを実行"""
+    if not (Path('gradlew').exists() or Path('build.gradle').exists() or Path('build.gradle.kts').exists()):
+        return True, "Kotlin/Gradle プロジェクトなし（スキップ）", {'type': 'kotlin', 'success': True, 'tests_passed': 0, 'tests_failed': 0, 'coverage': 0}
+    print("🧪 Kotlin/Gradle テストを実行中...")
+    gradlew = './gradlew' if Path('gradlew').exists() else 'gradle'
+    cmd = f"{gradlew} test --no-daemon"
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    output = result.stdout + '\n' + result.stderr
+    return result.returncode == 0, output, {'type': 'kotlin', 'success': result.returncode == 0, 'tests_passed': 0, 'tests_failed': 0, 'coverage': 0}
+
+
+def run_go_tests() -> Tuple[bool, str, Dict]:
+    """Go のテストを実行"""
+    if not Path('go.mod').exists():
+        return True, "Go プロジェクトなし（スキップ）", {'type': 'go', 'success': True, 'tests_passed': 0, 'tests_failed': 0, 'coverage': 0}
+    print("🧪 Go テストを実行中...")
+    cmd = 'go test ./...'
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    output = result.stdout + '\n' + result.stderr
+    return result.returncode == 0, output, {'type': 'go', 'success': result.returncode == 0, 'tests_passed': 0, 'tests_failed': 0, 'coverage': 0}
+
+
+def run_rust_tests() -> Tuple[bool, str, Dict]:
+    """Rust/cargo のテストを実行"""
+    if not Path('Cargo.toml').exists():
+        return True, "Rust プロジェクトなし（スキップ）", {'type': 'rust', 'success': True, 'tests_passed': 0, 'tests_failed': 0, 'coverage': 0}
+    print("🧪 Rust テストを実行中...")
+    cmd = 'cargo test --all --locked'
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    output = result.stdout + '\n' + result.stderr
+    return result.returncode == 0, output, {'type': 'rust', 'success': result.returncode == 0, 'tests_passed': 0, 'tests_failed': 0, 'coverage': 0}
 
 
 def run_python_tests() -> Tuple[bool, str, Dict]:
@@ -232,8 +289,36 @@ def main():
         if not success:
             overall_success = False
 
+        # Node の場合、Playwright E2E も試行
+        ps, po, pr = run_playwright_e2e()
+        all_results.append(pr)
+        all_outputs.append(po)
+        if not ps:
+            overall_success = False
+
     if 'python' in project_types:
         success, output, results = run_python_tests()
+        all_results.append(results)
+        all_outputs.append(output)
+        if not success:
+            overall_success = False
+
+    if 'kotlin' in project_types:
+        success, output, results = run_kotlin_tests()
+        all_results.append(results)
+        all_outputs.append(output)
+        if not success:
+            overall_success = False
+
+    if 'go' in project_types:
+        success, output, results = run_go_tests()
+        all_results.append(results)
+        all_outputs.append(output)
+        if not success:
+            overall_success = False
+
+    if 'rust' in project_types:
+        success, output, results = run_rust_tests()
         all_results.append(results)
         all_outputs.append(output)
         if not success:

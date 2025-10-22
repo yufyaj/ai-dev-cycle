@@ -1,0 +1,59 @@
+name: 01 Plan Issues
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'requirements/BRD.md'
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: plan-issues-${{ github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate issues.plan.json with Claude
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: agent
+          direct_prompt: |
+            `.claude/commands/task.md` の仕様に従って、`out/issues.plan.json` を生成してください。
+            入力: requirements/BRD.md の本文を解析し、優先度（P0, P1, ...）と依存関係を明確に含めること。
+            既存のファイルがある場合は上書きして構いません。
+
+      - name: Dry-run create issues
+        run: |
+          python3 scripts/create_issues.py --repo $GITHUB_REPOSITORY --dry-run || true
+
+      - name: Create issues
+        run: |
+          python3 scripts/create_issues.py --repo $GITHUB_REPOSITORY
+          echo "✅ Issues created from out/issues.plan.json"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan-results
+          path: out/
+

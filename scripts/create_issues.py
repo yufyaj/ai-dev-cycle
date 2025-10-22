@@ -60,6 +60,16 @@ def main():
         key = it["key"]
         title = it["title"]
         labels = it.get("labels", [])
+        # 優先度をラベルとして付与（例: P0/P1/...）
+        if it.get("priority"):
+            labels = labels + [it["priority"]]
+        # クリティカルパス順序のラベル（cp:n）を付与（itemsの並び順をそのまま採用）
+        # インデックスは1始まりの連番
+        try:
+            idx = items.index(it) + 1
+            labels.append(f"cp:{idx}")
+        except Exception:
+            pass
         body = build_body(it)
 
         if args.dry_run:

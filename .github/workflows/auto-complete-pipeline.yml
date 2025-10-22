@@ -25,11 +25,16 @@ name: Auto Complete Pipeline
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
   ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
   MAX_RETRY: ${{ github.event.inputs.max_retry_count }}
   RETRY_COUNT: ${{ github.event.inputs.retry_count }}
   FEEDBACK: ${{ github.event.inputs.feedback }}
+
+concurrency:
+  group: auto-complete-${{ github.event.inputs.issue_number }}
+  cancel-in-progress: true
 
 jobs:
   # =====================================
@@ -185,6 +190,17 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Setup environment
         run: |
           git config user.name "Claude AI Agent"
@@ -202,6 +218,11 @@ jobs:
             else
               echo "  package.json使用: npm install"
               npm install
+            fi
+
+            # Playwright が存在する場合はブラウザ依存をインストール
+            if [ -f playwright.config.ts ] || [ -f playwright.config.js ]; then
+              npx playwright install --with-deps || true
             fi
           fi
 

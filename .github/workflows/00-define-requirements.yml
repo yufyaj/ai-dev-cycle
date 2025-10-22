@@ -1,0 +1,131 @@
+name: 00 Define Requirements
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'BRD定義の元となるIssue番号（任意。未指定なら直入力のみ）'
+        required: false
+        type: string
+      prompt:
+        description: '要件の背景/目的・制約など（任意）'
+        required: false
+        type: string
+  issues:
+    types: [labeled]
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: define-requirements-${{ github.event.inputs.issue_number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  define-brd:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && contains(github.event.label.name, 'brd:request'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validators
+        run: |
+          pip install -q -U pip
+          pip install -q PyGithub requests
+
+      - name: Resolve requirement input
+        id: input
+        run: |
+          echo "📝 要件入力を収集します"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ISSUE_NUM="${{ inputs.issue_number }}"
+            PROMPT="${{ inputs.prompt }}"
+          else
+            ISSUE_NUM="${{ github.event.issue.number }}"
+            PROMPT=""
+          fi
+
+          if [ -n "$ISSUE_NUM" ]; then
+            gh issue view "$ISSUE_NUM" --json body,title > issue.json
+            TITLE=$(jq -r .title issue.json)
+            BODY=$(jq -r .body issue.json)
+            echo "title=$TITLE" >> $GITHUB_OUTPUT
+            echo "source_issue=$ISSUE_NUM" >> $GITHUB_OUTPUT
+            echo "prompt<<EOF" >> $GITHUB_OUTPUT
+            echo "$BODY" >> $GITHUB_OUTPUT
+            echo "\n---\n追加情報:\n${PROMPT}" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "source_issue=" >> $GITHUB_OUTPUT
+            echo "title=BRD" >> $GITHUB_OUTPUT
+            echo "prompt<<EOF" >> $GITHUB_OUTPUT
+            echo "${PROMPT}" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate/Refine BRD with Claude (attempt 1)
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: agent
+          direct_prompt: |
+            あなたは .claude/commands/brd.md の規約に従って、requirements/BRD.md を生成・更新してください。
+            入力（背景/目的/制約など）:
+            ---
+            ${{ steps.input.outputs.prompt }}
+            ---
+
+      - name: Validate BRD (attempt 1)
+        id: v1
+        continue-on-error: true
+        run: |
+          python3 scripts/validate_brd.py --json > out.json || true
+          cat out.json
+          OK=$(jq -r .ok out.json)
+          echo "ok=$OK" >> $GITHUB_OUTPUT
+
+      - name: Refine BRD with Claude (attempt 2)
+        if: steps.v1.outputs.ok != 'true'
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: agent
+          direct_prompt: |
+            `python3 scripts/validate_brd.py --json` の結果がNGでした。`out.json` の `errors` をすべて解消するように requirements/BRD.md を最小変更で修正してください。
+            バリデーション結果:
+            ${{ steps.v1.outputs.ok == 'true' && '' || format('{{0}}', steps.v1.outputs.ok) }}
+
+      - name: Validate BRD (attempt 2)
+        id: v2
+        if: steps.v1.outputs.ok != 'true'
+        continue-on-error: true
+        run: |
+          python3 scripts/validate_brd.py --json > out2.json || true
+          cat out2.json
+          OK=$(jq -r .ok out2.json)
+          echo "ok=$OK" >> $GITHUB_OUTPUT
+
+      - name: Finalize and Comment
+        run: |
+          echo "✅ BRDが整備されました。"
+          if [ -n "${{ steps.input.outputs.source_issue }}" ]; then
+            gh issue comment "${{ steps.input.outputs.source_issue }}" --body "BRDの生成/更新が完了しました。\n\n- ファイル: requirements/BRD.md\n- 自動検証: 成功\n\nこのIssueが要件定義用であれば、'brd:ready' ラベルを付与し、次の '01 Plan Issues' を実行してください。"
+            gh issue edit "${{ steps.input.outputs.source_issue }}" --add-label "brd:ready" || true
+          fi
+

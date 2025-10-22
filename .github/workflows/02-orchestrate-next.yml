@@ -1,0 +1,67 @@
+name: 02 Orchestrate Next
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_issue_number:
+        description: '強制的にこのIssue番号を実行'
+        required: false
+        type: string
+  schedule:
+    - cron: '0 * * * *'
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+concurrency:
+  group: orchestrate-next
+  cancel-in-progress: true
+
+jobs:
+  choose-and-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Determine next issue
+        id: pick
+        run: |
+          if [ -n "${{ inputs.force_issue_number }}" ]; then
+            echo "issue=${{ inputs.force_issue_number }}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          python3 scripts/choose_next_issue.py > next.txt || true
+          if [ -s next.txt ]; then
+            ISSUE=$(cat next.txt)
+            echo "issue=$ISSUE" >> $GITHUB_OUTPUT
+          else
+            echo "issue=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Exit if nothing to do
+        if: steps.pick.outputs.issue == ''
+        run: |
+          echo "🟡 実行可能なIssueが見つかりませんでした"
+
+      - name: Trigger auto complete pipeline
+        if: steps.pick.outputs.issue != ''
+        run: |
+          echo "🚀 起動: auto-complete-pipeline.yml (#${{ steps.pick.outputs.issue }})"
+          gh workflow run auto-complete-pipeline.yml \
+            --ref main \
+            --field issue_number="${{ steps.pick.outputs.issue }}" \
+            --field max_retry_count="5"
+
