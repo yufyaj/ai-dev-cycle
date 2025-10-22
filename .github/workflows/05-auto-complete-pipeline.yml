@@ -22,15 +22,32 @@ on:
         required: false
         type: string
         default: ''
+  workflow_call:
+    inputs:
+      issue_number:
+        required: true
+        type: string
+      max_retry_count:
+        required: false
+        type: string
+        default: '5'
+      retry_count:
+        required: false
+        type: string
+        default: '0'
+      feedback:
+        required: false
+        type: string
+        default: ''
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-  ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
-  MAX_RETRY: ${{ github.event.inputs.max_retry_count }}
-  RETRY_COUNT: ${{ github.event.inputs.retry_count }}
-  FEEDBACK: ${{ github.event.inputs.feedback }}
+  ISSUE_NUMBER: ${{ inputs.issue_number }}
+  MAX_RETRY: ${{ inputs.max_retry_count }}
+  RETRY_COUNT: ${{ inputs.retry_count }}
+  FEEDBACK: ${{ inputs.feedback }}
 
 concurrency:
   group: auto-complete-${{ github.event.inputs.issue_number }}
@@ -763,12 +780,9 @@ PY
         run: |
           echo "🔄 ワークフローを再実行します..."
 
-          # ワークフローを再実行（フィードバック付き）
-          gh workflow run 05-auto-complete-pipeline.yml \
-            --field issue_number="${{ env.ISSUE_NUMBER }}" \
-            --field max_retry_count="${{ env.MAX_RETRY }}" \
-            --field retry_count="${{ steps.check-retry.outputs.next_retry }}" \
-            --field feedback="${{ steps.collect-feedback.outputs.feedback }}"
+          # オーケストレーター経由で再実行
+          gh workflow run 02-orchestrate-next.yml \
+            --field force_issue_number="${{ env.ISSUE_NUMBER }}"
 
       - name: Final failure notification
         if: steps.check-retry.outputs.can_retry == 'false'
@@ -787,25 +801,14 @@ PY
 
           ---
 
+
           ## 📝 続きから実行する場合
 
           手動で修正後、または続きから再試行する場合は以下のコマンドを使用してください：
 
           \`\`\`bash
-          gh workflow run 05-auto-complete-pipeline.yml \\
-            --field issue_number=${{ env.ISSUE_NUMBER }} \\
-            --field max_retry_count=${{ env.MAX_RETRY }} \\
-            --field retry_count=${{ env.RETRY_COUNT }} \\
-            --field feedback='前回の失敗内容を基に修正を継続'
-          \`\`\`
-
-          または、より多くの試行回数で再開：
-
-          \`\`\`bash
-          gh workflow run 05-auto-complete-pipeline.yml \\
-            --field issue_number=${{ env.ISSUE_NUMBER }} \\
-            --field max_retry_count=10 \\
-            --field retry_count=${{ env.RETRY_COUNT }}
+          gh workflow run 02-orchestrate-next.yml \\
+            --field force_issue_number=${{ env.ISSUE_NUMBER }}
           \`\`\`"
 
           # コンソールにも出力
