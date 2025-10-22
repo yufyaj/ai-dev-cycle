@@ -28,7 +28,7 @@ jobs:
           echo "🟢 Auto-merge enabling for #$PR"
           gh pr merge "$PR" --squash --auto || true
 
-      - name: Trigger orchestrator for next issue
+      - name: Post follow-up hint
         run: |
-          gh workflow run 02-orchestrate-next.yml
-
+          echo "次タスクの自動実装を開始するには、05 Auto Complete Pipeline を issue_number 指定で起動してください。"
+          echo "例: gh workflow run 05-auto-complete-pipeline.yml --field issue_number=<番号> --field max_retry_count=5"
