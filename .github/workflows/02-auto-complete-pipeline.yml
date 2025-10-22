@@ -1,4 +1,4 @@
-name: 02 Auto Complete Pipeline
+name: 02 Auto Complete Pipeline (refresh)
 
 on:
   workflow_dispatch:
