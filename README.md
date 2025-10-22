@@ -41,9 +41,9 @@
 ## 典型フロー（おすすめ）
 
 1) 要件定義（ローカル対話）
-- ローカルで BRD ウィザードを実行
-  - `python3 scripts/brd_interactive.py`
-- BRD は `docs/requirements/BRD.md` に保存され、体裁検証も自動実行
+- docs/requirements/BRD_GUIDE.md を参照しつつ、Claude Code と対話で要件を固める
+- docs/requirements/BRD_TEMPLATE.md をベースに `docs/requirements/BRD.md` を作成
+- 必要なら `python3 scripts/validate_brd.py --json` で形式チェック
 
 2) タスク化（Issue作成）
 - Actions から「01 Plan Issues」を実行

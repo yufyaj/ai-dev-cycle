@@ -52,7 +52,7 @@ description: "引数で指定した内容でBRDを作成します。"
 - 例：**「BFFは中継・最小整形のみ。ビジネスロジックはサーバー側に集約」**
 
 ## 自動検証ループ（不明点解消後に開始）
-1. `docs/requirements/BRD.md` を生成/更新。
+1. `docs/requirements/BRD_GUIDE.md` を参照し、`docs/requirements/BRD_TEMPLATE.md` をベースに `docs/requirements/BRD.md` を生成/更新。
 2. `python3 scripts/validate_brd.py --json` を実行して検証結果を取得。
 3. `ok:false` なら `errors[].code` に基づき自動修正し、1→2 を**合格まで**継続（回数上限なし）。
 4. 合格後、最終稿を保存して終了。
