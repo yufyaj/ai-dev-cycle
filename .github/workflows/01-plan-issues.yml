@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'requirements/BRD.md'
+      - 'docs/requirements/BRD.md'
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

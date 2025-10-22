@@ -40,9 +40,10 @@
 
 ## 典型フロー（おすすめ）
 
-1) 要件定義（対話）
-- Issueに `brd:request` を付与 もしくは Actions から「00 Define Requirements」を実行
-- BRD（`requirements/BRD.md`）が自動整形・検証・修正されます
+1) 要件定義（ローカル対話）
+- ローカルで BRD ウィザードを実行
+  - `python3 scripts/brd_interactive.py`
+- BRD は `docs/requirements/BRD.md` に保存され、体裁検証も自動実行
 
 2) タスク化（Issue作成）
 - Actions から「01 Plan Issues」を実行
@@ -60,8 +61,6 @@
 
 ## CLI から手動実行（`gh`）
 
-- 要件定義（Issue指定・追加プロンプト付き）
-  - `gh workflow run 00-define-requirements.yml --field issue_number=37 --field prompt='背景/目的/制約など'`
 - タスク化
   - `gh workflow run 01-plan-issues.yml`
 - 次タスクの自動実装を起動
