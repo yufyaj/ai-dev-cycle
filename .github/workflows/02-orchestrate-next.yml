@@ -64,8 +64,8 @@ jobs:
       - name: Trigger auto complete pipeline
         if: steps.pick.outputs.issue != ''
         run: |
-          echo "🚀 起動: auto-complete-pipeline.yml (#${{ steps.pick.outputs.issue }})"
-          gh workflow run auto-complete-pipeline.yml \
+          echo "🚀 起動: 05-auto-complete-pipeline.yml (#${{ steps.pick.outputs.issue }})"
+          gh workflow run 05-auto-complete-pipeline.yml \
             --ref main \
             --field issue_number="${{ steps.pick.outputs.issue }}" \
             --field max_retry_count="5"
