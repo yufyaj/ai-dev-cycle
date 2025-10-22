@@ -22,15 +22,17 @@ on:
         required: false
         type: string
         default: ''
+  repository_dispatch:
+    types: [run-02]
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-  ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
-  MAX_RETRY: ${{ github.event.inputs.max_retry_count }}
-  RETRY_COUNT: ${{ github.event.inputs.retry_count }}
-  FEEDBACK: ${{ github.event.inputs.feedback }}
+  ISSUE_NUMBER: ${{ github.event.inputs.issue_number || github.event.client_payload.issue_number }}
+  MAX_RETRY: ${{ github.event.inputs.max_retry_count || github.event.client_payload.max_retry_count || '5' }}
+  RETRY_COUNT: ${{ github.event.inputs.retry_count || github.event.client_payload.retry_count || '0' }}
+  FEEDBACK: ${{ github.event.inputs.feedback || github.event.client_payload.feedback || '' }}
 
 concurrency:
   group: auto-complete-${{ env.ISSUE_NUMBER }}
