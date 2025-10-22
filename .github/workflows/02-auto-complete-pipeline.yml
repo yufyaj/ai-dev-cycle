@@ -22,32 +22,15 @@ on:
         required: false
         type: string
         default: ''
-  workflow_call:
-    inputs:
-      issue_number:
-        required: true
-        type: string
-      max_retry_count:
-        required: false
-        type: string
-        default: '5'
-      retry_count:
-        required: false
-        type: string
-        default: '0'
-      feedback:
-        required: false
-        type: string
-        default: ''
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-  ISSUE_NUMBER: ${{ inputs.issue_number }}
-  MAX_RETRY: ${{ inputs.max_retry_count }}
-  RETRY_COUNT: ${{ inputs.retry_count }}
-  FEEDBACK: ${{ inputs.feedback }}
+  ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+  MAX_RETRY: ${{ github.event.inputs.max_retry_count }}
+  RETRY_COUNT: ${{ github.event.inputs.retry_count }}
+  FEEDBACK: ${{ github.event.inputs.feedback }}
 
 concurrency:
   group: auto-complete-${{ env.ISSUE_NUMBER }}
