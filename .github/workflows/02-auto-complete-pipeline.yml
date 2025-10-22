@@ -22,6 +22,8 @@ on:
         required: false
         type: string
         default: ''
+  issues:
+    types: [labeled]
   repository_dispatch:
     types: [run-02]
 
@@ -29,7 +31,7 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-  ISSUE_NUMBER: ${{ github.event.inputs.issue_number || github.event.client_payload.issue_number }}
+  ISSUE_NUMBER: ${{ github.event.inputs.issue_number || github.event.client_payload.issue_number || github.event.issue.number }}
   MAX_RETRY: ${{ github.event.inputs.max_retry_count || github.event.client_payload.max_retry_count || '5' }}
   RETRY_COUNT: ${{ github.event.inputs.retry_count || github.event.client_payload.retry_count || '0' }}
   FEEDBACK: ${{ github.event.inputs.feedback || github.event.client_payload.feedback || '' }}
@@ -44,6 +46,12 @@ jobs:
   # =====================================
   setup-and-implement:
     name: "1️⃣ セットアップ & 実装"
+    if: |
+      github.event_name != 'issues' ||
+      github.event.label.name == 'ai:run' ||
+      github.event.label.name == 'auto:run' ||
+      github.event.label.name == 'ai:task-run' ||
+      github.event.label.name == 'ai:task'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

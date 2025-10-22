@@ -25,6 +25,7 @@
 - 02 Auto Complete Pipeline（`02-auto-complete-pipeline.yml`）
   - 役割: 実装→テスト（マルチランタイム＋Playwright）→レビュー→セキュリティ→PR 作成
   - 失敗時は自己リトライ（self-dispatch）。`max_retry_count` と `retry_count` で動的に制御
+  - 起動方法: 手動のほか、Issueにラベルを付与すると自動起動（`ai:run`/`auto:run`/`ai:task-run`/`ai:task`）
 - 03 PR CI + Security（`03-pr-ci-security.yml`）
   - 役割: PRでテスト実行（`scripts/run_all_tests.py`）と PR サイズ検査（10ファイル/500行、`scripts/check_pr_size.py`）
 - 04 Auto Merge And Next（`04-auto-merge-and-next.yml`）
@@ -61,6 +62,7 @@
   - `gh workflow run 01-plan-issues.yml`
 - 自動実装パイプラインを起動（Issue指定）
   - `gh workflow run 02-auto-complete-pipeline.yml --field issue_number=37 --field max_retry_count=5`
+  - ラベルで起動: `gh issue edit 37 --add-label ai:run`
   - 続きから再開する場合: `--field retry_count=<前回値>` と `--field feedback='...'` を指定
 
 ---
