@@ -1,4 +1,4 @@
-name: CodeQL
+name: 90 CodeQL
 
 on:
   push:
@@ -40,4 +40,3 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: '/language:${{matrix.language}}'
-

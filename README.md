@@ -22,14 +22,14 @@
 - 01 Plan Issues（`01-plan-issues.yml`）
   - 役割: BRD を解析し `out/issues.plan.json` を生成 → GitHub Issues を一括作成
   - Issue には優先度ラベル（`P0`等）とクリティカルパス順序（`cp:n`）を自動付与
-- 05 Auto Complete Pipeline（`05-auto-complete-pipeline.yml`）
+- 02 Auto Complete Pipeline（`02-auto-complete-pipeline.yml`）
   - 役割: 実装→テスト（マルチランタイム＋Playwright）→レビュー→セキュリティ→PR 作成
   - 失敗時は自己リトライ（self-dispatch）。`max_retry_count` と `retry_count` で動的に制御
 - 03 PR CI + Security（`03-pr-ci-security.yml`）
   - 役割: PRでテスト実行（`scripts/run_all_tests.py`）と PR サイズ検査（10ファイル/500行、`scripts/check_pr_size.py`）
 - 04 Auto Merge And Next（`04-auto-merge-and-next.yml`）
   - 役割: `automerge` ラベルのPRを自動（squash）マージ（次タスク起動は手動で05を実行）
-- CodeQL（`codeql.yml`）
+- 90 CodeQL（`codeql.yml`）
   - 役割: JavaScript/Python/Java/Kotlin/Go の静的解析を PR とスケジュールで実施
 
 ---
@@ -46,7 +46,7 @@
 - BRD → `out/issues.plan.json` → GitHub Issues作成（`P0/P1`、`cp:n`付与）
 
 3) 自動実装の起動
-- Actions から「05 Auto Complete Pipeline」を実行（`issue_number` を指定）
+- Actions から「02 Auto Complete Pipeline」を実行（`issue_number` を指定）
 - 失敗時は自己リトライで継続（上限は `max_retry_count`）
 
 4) PR検証・自動マージ
@@ -60,7 +60,7 @@
 - タスク化
   - `gh workflow run 01-plan-issues.yml`
 - 自動実装パイプラインを起動（Issue指定）
-  - `gh workflow run 05-auto-complete-pipeline.yml --field issue_number=37 --field max_retry_count=5`
+  - `gh workflow run 02-auto-complete-pipeline.yml --field issue_number=37 --field max_retry_count=5`
   - 続きから再開する場合: `--field retry_count=<前回値>` と `--field feedback='...'` を指定
 
 ---
