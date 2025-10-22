@@ -128,6 +128,7 @@ jobs:
           fi
 
       - name: Implementation with Claude
+        if: env.CLAUDE_CODE_OAUTH_TOKEN != ''
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -354,6 +355,7 @@ jobs:
           echo "📊 変更統計: ${FILES_CHANGED}ファイル / ${LINES_ADDED:-0}行"
 
       - name: Code review with Claude
+        if: env.CLAUDE_CODE_OAUTH_TOKEN != ''
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -472,6 +474,7 @@ PY
           5. ⏹️ PR作成"
 
       - name: Security analysis with Claude
+        if: env.CLAUDE_CODE_OAUTH_TOKEN != ''
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
