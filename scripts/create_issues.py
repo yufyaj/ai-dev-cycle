@@ -24,6 +24,50 @@ def run(cmd):
         raise RuntimeError(f"cmd failed: {' '.join(cmd)}\n{res.stderr}")
     return res.stdout.strip()
 
+def run_soft(cmd):
+    """非ゼロでも例外にせず標準出力を返す（ラベル作成など冪等操作向け）"""
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    return res.returncode, res.stdout.strip(), res.stderr.strip()
+
+def ensure_labels(repo: str, items: list[dict]):
+    """必要なラベルを事前に作成（存在すればスキップ）"""
+    need: set[str] = set()
+    # 既定の色（任意）
+    color_map = {
+        'feature': 'a2eeef',
+        'backend': '5319e7',
+        'frontend': '1d76db',
+        'ai:task': 'ededed',
+        'bug': 'd73a4a',
+        'P0': 'd73a4a',
+        'P1': 'fbca04',
+        'P2': 'c5def5',
+    }
+    # itemsから収集
+    for it in items:
+        for l in it.get('labels', []) or []:
+            need.add(l)
+        if it.get('priority'):
+            need.add(it['priority'])
+    # cp:n ラベル（連番）
+    for idx, _ in enumerate(items, start=1):
+        need.add(f"cp:{idx}")
+
+    # 既存ラベル一覧を取得
+    code, out, err = run_soft(["gh", "label", "list", "--repo", repo, "--json", "name", "--jq", ".[].name"])
+    existing = set(out.splitlines()) if code == 0 else set()
+
+    for name in sorted(need):
+        if name in existing:
+            continue
+        color = color_map.get(name, 'ededed')
+        desc = f"auto-created label: {name}"
+        # 作成を試行。既存なら失敗するが無視
+        rc, so, se = run_soft(["gh", "label", "create", name, "--repo", repo, "--color", color, "-d", desc])
+        # 失敗しても続行（権限不足など）
+        if rc != 0:
+            print(f"WARN: failed to create label '{name}': {se}")
+
 def build_body(item):
     lines = []
     if item.get("summary"):
@@ -54,6 +98,9 @@ def main():
         raise SystemExit("no items in plan")
 
     created = {"repo": args.repo, "map": {}}  # key -> issue_number
+
+    # 必要なラベルを事前に作成
+    ensure_labels(args.repo, items)
 
     # 1st pass: Issueを作成
     for it in items:
