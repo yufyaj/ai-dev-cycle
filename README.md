@@ -80,9 +80,6 @@
 - `scripts/check_pr_size.py`
   - PRサイズ（10ファイル/500行以内）検査
   - 使い方: `export PR_NUMBER=<番号>; python3 scripts/check_pr_size.py`
-- `scripts/choose_next_issue.py`
-  - 依存解決済みの最優先Issueを選び、番号を出力
-  - 使い方: `python3 scripts/choose_next_issue.py`（`GITHUB_TOKEN` 必須）
 
 ---
 
