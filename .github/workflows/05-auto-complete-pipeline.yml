@@ -50,7 +50,7 @@ env:
   FEEDBACK: ${{ inputs.feedback }}
 
 concurrency:
-  group: auto-complete-${{ github.event.inputs.issue_number }}
+  group: auto-complete-${{ env.ISSUE_NUMBER }}
   cancel-in-progress: true
 
 jobs:
@@ -283,15 +283,367 @@ jobs:
             echo "❌ テスト失敗"
             echo "passed=false" >> $GITHUB_OUTPUT
           fi
+      - name: Fix test failures with Claude - Attempt 1
+        if: steps.test-result.outputs.passed != 'true' && env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'agent'
+          direct_prompt: |
+            テストが失敗しました。エラーを修正してください。
+
+            以下の手順で修正を実施してください：
+            1. out/test_results.log ファイルからテストエラーログを確認
+            2. エラーの原因を特定
+            3. docs/ の方針（docs/architecture, docs/tech）を守って修正
+            4. TDD原則に基づいて修正（テストが通るように実装を修正）
+            5. 修正したファイルを保存
+
+            これは修正試行 1回目/最大${{ env.MAX_RETRY }}回 です。
+
+      - name: Commit and test - Attempt 1
+        if: steps.test-result.outputs.passed != 'true'
+        id: fix-attempt-1
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正 (試行 1)
+
+            🤖 AI によるテスト修正
+            Issue #${ISSUE_NUMBER}
+
+            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
+          echo "🧪 修正後のテストを実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -eq 0 ]; then
+            echo "✅ テスト成功！"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ テストがまだ失敗しています"
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fix test failures with Claude - Attempt 2
+        if: steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 2 && env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'agent'
+          direct_prompt: |
+            前回の修正後もテストが失敗しています。再度修正を試みてください。
+
+            前回とは異なるアプローチで修正を試みてください：
+            1. out/test_results.log から最新のエラーを確認
+            2. 前回の修正が不十分だった理由を分析
+            3. より根本的な修正を実施
+            4. 必要に応じてテストコード自体も修正可能
+
+            これは修正試行 2回目/最大${{ env.MAX_RETRY }}回 です。
+
+      - name: Commit and test - Attempt 2
+        if: steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 2
+        id: fix-attempt-2
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正 (試行 2)
+
+            🤖 AI によるテスト修正（再試行）
+            Issue #${ISSUE_NUMBER}
+
+            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
+          echo "🧪 修正後のテストを実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -eq 0 ]; then
+            echo "✅ テスト成功！"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ テストがまだ失敗しています"
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fix test failures with Claude - Attempt 3
+        if: steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 3 && env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'agent'
+          direct_prompt: |
+            2回の修正試行後もテストが失敗しています。最後の修正を試みてください。
+
+            最終試行として以下を検討してください：
+            1. out/test_results.log から根本原因を再分析
+            2. 設計レベルの問題がないか確認
+            3. 環境依存の問題がないか確認
+            4. 必要最小限の実装に簡素化することも検討
+
+            これは最後の修正試行 3回目/最大${{ env.MAX_RETRY }}回 です。
+
+      - name: Commit and test - Attempt 3
+        if: steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 3
+        id: fix-attempt-3
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正 (試行 3)
+
+            🤖 AI によるテスト修正（最終試行）
+            Issue #${ISSUE_NUMBER}
+
+            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
+      - name: Fix test failures with Claude - Attempt 4
+        if: steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 4 && env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'agent'
+          direct_prompt: |
+            3回の修正試行後もテストが失敗しています。再度修正を試みてください（試行 4）。
+      - name: Commit and test - Attempt 4
+        if: steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 4
+        id: fix-attempt-4
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正 (試行 4)\n\n🤖 AI によるテスト修正（再試行）\nIssue #${ISSUE_NUMBER}\n\nCo-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
+          echo "🧪 修正後のテストを実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -eq 0 ]; then
+            echo "✅ テスト成功！"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ テストがまだ失敗しています"
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Fix test failures with Claude - Attempt 5
+        if: steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 5 && env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'agent'
+          direct_prompt: |
+            さらに修正を試行してください（試行 5）。根本原因の再分析と最小修正を優先。
+      - name: Commit and test - Attempt 5
+        if: steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 5
+        id: fix-attempt-5
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正 (試行 5)\n\n🤖 AI によるテスト修正（再試行）\nIssue #${ISSUE_NUMBER}\n\nCo-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
+          echo "🧪 修正後のテストを実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -eq 0 ]; then
+            echo "✅ テスト成功！"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ テストがまだ失敗しています"
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Fix test failures with Claude - Attempt 6
+        if: steps.fix-attempt-5.outputs.success != 'true' && steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 6 && env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'agent'
+          direct_prompt: |
+            継続的に失敗しています。設計見直しや簡素化を含めて再検討（試行 6）。
+      - name: Commit and test - Attempt 6
+        if: steps.fix-attempt-5.outputs.success != 'true' && steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 6
+        id: fix-attempt-6
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正 (試行 6)\n\n🤖 AI によるテスト修正（再試行）\nIssue #${ISSUE_NUMBER}\n\nCo-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
+          echo "🧪 修正後のテストを実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -eq 0 ]; then
+            echo "✅ テスト成功！"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ テストがまだ失敗しています"
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Fix test failures with Claude - Attempt 7
+        if: steps.fix-attempt-6.outputs.success != 'true' && steps.fix-attempt-5.outputs.success != 'true' && steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 7 && env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'agent'
+          direct_prompt: |
+            継続失敗。テストの見直しや仮説の再構築も含め検討（試行 7）。
+      - name: Commit and test - Attempt 7
+        if: steps.fix-attempt-6.outputs.success != 'true' && steps.fix-attempt-5.outputs.success != 'true' && steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 7
+        id: fix-attempt-7
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正 (試行 7)\n\n🤖 AI によるテスト修正（再試行）\nIssue #${ISSUE_NUMBER}\n\nCo-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
+          echo "🧪 修正後のテストを実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -eq 0 ]; then
+            echo "✅ テスト成功！"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ テストがまだ失敗しています"
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Fix test failures with Claude - Attempt 8
+        if: steps.fix-attempt-7.outputs.success != 'true' && steps.fix-attempt-6.outputs.success != 'true' && steps.fix-attempt-5.outputs.success != 'true' && steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 8 && env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'agent'
+          direct_prompt: |
+            継続失敗。設計の簡素化（最小実装）で突破口を探る（試行 8）。
+      - name: Commit and test - Attempt 8
+        if: steps.fix-attempt-7.outputs.success != 'true' && steps.fix-attempt-6.outputs.success != 'true' && steps.fix-attempt-5.outputs.success != 'true' && steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 8
+        id: fix-attempt-8
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正 (試行 8)\n\n🤖 AI によるテスト修正（再試行）\nIssue #${ISSUE_NUMBER}\n\nCo-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
+          echo "🧪 修正後のテストを実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -eq 0 ]; then
+            echo "✅ テスト成功！"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ テストがまだ失敗しています"
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Fix test failures with Claude - Attempt 9
+        if: steps.fix-attempt-8.outputs.success != 'true' && steps.fix-attempt-7.outputs.success != 'true' && steps.fix-attempt-6.outputs.success != 'true' && steps.fix-attempt-5.outputs.success != 'true' && steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 9 && env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'agent'
+          direct_prompt: |
+            継続失敗。影響範囲を最小化した分割対応を検討（試行 9）。
+      - name: Commit and test - Attempt 9
+        if: steps.fix-attempt-8.outputs.success != 'true' && steps.fix-attempt-7.outputs.success != 'true' && steps.fix-attempt-6.outputs.success != 'true' && steps.fix-attempt-5.outputs.success != 'true' && steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 9
+        id: fix-attempt-9
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正 (試行 9)\n\n🤖 AI によるテスト修正（再試行）\nIssue #${ISSUE_NUMBER}\n\nCo-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
+          echo "🧪 修正後のテストを実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -eq 0 ]; then
+            echo "✅ テスト成功！"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ テストがまだ失敗しています"
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Fix test failures with Claude - Attempt 10
+        if: steps.fix-attempt-9.outputs.success != 'true' && steps.fix-attempt-8.outputs.success != 'true' && steps.fix-attempt-7.outputs.success != 'true' && steps.fix-attempt-6.outputs.success != 'true' && steps.fix-attempt-5.outputs.success != 'true' && steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 10 && env.CLAUDE_CODE_OAUTH_TOKEN != ''
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: 'agent'
+          direct_prompt: |
+            最終試行（10）。設計の簡素化や代替案への切替を含めて解決策を提示。
+      - name: Commit and test - Attempt 10
+        if: steps.fix-attempt-9.outputs.success != 'true' && steps.fix-attempt-8.outputs.success != 'true' && steps.fix-attempt-7.outputs.success != 'true' && steps.fix-attempt-6.outputs.success != 'true' && steps.fix-attempt-5.outputs.success != 'true' && steps.fix-attempt-4.outputs.success != 'true' && steps.fix-attempt-3.outputs.success != 'true' && steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true' && fromJSON(env.MAX_RETRY) >= 10
+        id: fix-attempt-10
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "fix: テスト失敗の自動修正 (試行 10)\n\n🤖 AI によるテスト修正（最終試行）\nIssue #${ISSUE_NUMBER}\n\nCo-authored-by: Claude AI <claude-agent@anthropic.com>"
+            git push
+          fi
+          echo "🧪 修正後のテストを実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -eq 0 ]; then
+            echo "✅ テスト成功！"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ 修正試行の上限でもテストが失敗しました"
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "🧪 修正後のテストを実行..."
+          python3 scripts/run_all_tests.py
+          if [ $? -eq 0 ]; then
+            echo "✅ テスト成功！"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ 3回の修正試行後もテストが失敗しました"
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
       - name: Determine if reimplementation needed
         id: final-check
         run: |
-          if [ "${{ steps.test-result.outputs.passed }}" != "true" ]; then
-            echo "🔄 テスト失敗 - 再実装が必要です"
+          TEST_SUCCESS=false
+          if [ "${{ steps.test-result.outputs.passed }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 初回テストで成功"
+          elif [ "${{ steps.fix-attempt-1.outputs.success }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 1回目の修正で成功"
+          elif [ "${{ steps.fix-attempt-2.outputs.success }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 2回目の修正で成功"
+          elif [ "${{ steps.fix-attempt-3.outputs.success }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 3回目の修正で成功"
+          elif [ "${{ steps.fix-attempt-4.outputs.success }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 4回目の修正で成功"
+          elif [ "${{ steps.fix-attempt-5.outputs.success }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 5回目の修正で成功"
+          elif [ "${{ steps.fix-attempt-6.outputs.success }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 6回目の修正で成功"
+          elif [ "${{ steps.fix-attempt-7.outputs.success }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 7回目の修正で成功"
+          elif [ "${{ steps.fix-attempt-8.outputs.success }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 8回目の修正で成功"
+          elif [ "${{ steps.fix-attempt-9.outputs.success }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 9回目の修正で成功"
+          elif [ "${{ steps.fix-attempt-10.outputs.success }}" == "true" ]; then
+            TEST_SUCCESS=true
+            echo "✅ 10回目の修正で成功"
+          fi
+
+          if [ "$TEST_SUCCESS" != "true" ]; then
+            echo "🔄 修正試行後もテスト失敗 - 再実装が必要です"
             echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
-            # フィードバックの雛形を作成
             cat > out/feedback.txt << 'EOF'
-          テストで失敗が検出されました:
+          テストで以下の問題が解決できませんでした（複数回の修正試行後）:
           - 最新のテストエラーは out/test_results.log を参照してください
           - 設計や依存の見直しが必要な可能性があります
           EOF
@@ -712,6 +1064,7 @@ PY
       contents: read
       issues: write
       actions: write
+      workflows: write
 
     steps:
       - name: Checkout repository
@@ -783,9 +1136,13 @@ PY
         run: |
           echo "🔄 ワークフローを再実行します..."
 
-          # オーケストレーター経由で再実行
-          gh workflow run 02-orchestrate-next.yml \
-            --field force_issue_number="${{ env.ISSUE_NUMBER }}"
+          # 同一ワークフローを再実行（フィードバック付き）
+          gh workflow run 05-auto-complete-pipeline.yml \
+            --ref "${{ github.ref_name }}" \
+            --field issue_number="${{ env.ISSUE_NUMBER }}" \
+            --field max_retry_count="${{ env.MAX_RETRY }}" \
+            --field retry_count="${{ steps.check-retry.outputs.next_retry }}" \
+            --field feedback="${{ steps.collect-feedback.outputs.feedback }}"
 
       - name: Final failure notification
         if: steps.check-retry.outputs.can_retry == 'false'
@@ -810,8 +1167,12 @@ PY
           手動で修正後、または続きから再試行する場合は以下のコマンドを使用してください：
 
           \`\`\`bash
-          gh workflow run 02-orchestrate-next.yml \\
-            --field force_issue_number=${{ env.ISSUE_NUMBER }}
+          gh workflow run 05-auto-complete-pipeline.yml \\
+            --ref "${{ github.ref_name }}" \\
+            --field issue_number=${{ env.ISSUE_NUMBER }} \\
+            --field max_retry_count=${{ env.MAX_RETRY }} \\
+            --field retry_count=${{ env.RETRY_COUNT }} \\
+            --field feedback='前回の失敗内容を基に修正を継続'
           \`\`\`"
 
           # コンソールにも出力
