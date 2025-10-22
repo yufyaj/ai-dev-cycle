@@ -4,7 +4,7 @@ description: "requirements/BRD.mdをベースにIssueを作成する。"
 ---
 
 # /task
-`requirements/BRD.md` をもとに、以下のルールで **実装タスクを自動生成**してください。
+`docs/requirements/BRD.md` をもとに、以下のルールで **実装タスクを自動生成**してください。
 
 ## 目的
 BRD（Business Requirements Document）に記載された各機能（H2）をもとに、  
@@ -14,7 +14,7 @@ BRD（Business Requirements Document）に記載された各機能（H2）をも
 ## 手順
 
 1. **入力**  
-   - `requirements/BRD.md` の本文を解析
+   - `docs/requirements/BRD.md` の本文を解析
    - 各 H2（機能）タイトルとその配下の Acceptance Criteria を抽出
    - 非機能要件・KPI も別途必要に応じてタスク化
 

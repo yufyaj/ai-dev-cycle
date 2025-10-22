@@ -127,7 +127,6 @@
 ## 参考
 
 - 主なワークフロー: `.github/workflows/*.yml`
-- BRD: `requirements/BRD.md`
+- BRD: `docs/requirements/BRD.md`
 - 生成計画: `out/issues.plan.json`（01で生成）
 - テスト結果: `out/test_report.json`（自動実装/PR CI）
-

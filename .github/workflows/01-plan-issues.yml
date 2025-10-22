@@ -39,7 +39,7 @@ jobs:
           mode: agent
           direct_prompt: |
             `.claude/commands/task.md` の仕様に従って、`out/issues.plan.json` を生成してください。
-            入力: requirements/BRD.md の本文を解析し、優先度（P0, P1, ...）と依存関係を明確に含めること。
+            入力: docs/requirements/BRD.md の本文を解析し、優先度（P0, P1, ...）と依存関係を明確に含めること。
             既存のファイルがある場合は上書きして構いません。
 
       - name: Dry-run create issues
@@ -56,4 +56,3 @@ jobs:
         with:
           name: plan-results
           path: out/
-

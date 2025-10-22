@@ -10,7 +10,9 @@ import re, sys, json
 from pathlib import Path
 import argparse
 
-p = Path("requirements/BRD.md")
+# 新方針: docs/requirements/BRD.md を優先。なければ互換の旧パス requirements/BRD.md を見る。
+DOCS_BRD = Path("docs/requirements/BRD.md")
+LEGACY_BRD = Path("requirements/BRD.md")
 
 def main():
     ap = argparse.ArgumentParser()
@@ -18,10 +20,11 @@ def main():
     args = ap.parse_args()
 
     errs = []
-    if not p.exists():
-        errs.append({"code":"MISSING_FILE","msg":"requirements/BRD.md is missing"})
+    target = DOCS_BRD if DOCS_BRD.exists() else LEGACY_BRD
+    if not target.exists():
+        errs.append({"code":"MISSING_FILE","msg":"docs/requirements/BRD.md (or requirements/BRD.md) is missing"})
     else:
-        t = p.read_text(encoding="utf-8")
+        t = target.read_text(encoding="utf-8")
         if len(t) > 200_000 or t.count("\n") > 4000:
             errs.append({"code":"TOO_LARGE","msg":"BRD too large; keep it concise"})
         h1 = re.findall(r"^#\s+.+$", t, flags=re.M)

@@ -84,7 +84,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           mode: agent
           direct_prompt: |
-            あなたは .claude/commands/brd.md の規約に従って、requirements/BRD.md を生成・更新してください。
+            あなたは .claude/commands/brd.md の規約に従って、docs/requirements/BRD.md を生成・更新してください。
             入力（背景/目的/制約など）:
             ---
             ${{ steps.input.outputs.prompt }}
@@ -125,7 +125,6 @@ jobs:
         run: |
           echo "✅ BRDが整備されました。"
           if [ -n "${{ steps.input.outputs.source_issue }}" ]; then
-            gh issue comment "${{ steps.input.outputs.source_issue }}" --body "BRDの生成/更新が完了しました。\n\n- ファイル: requirements/BRD.md\n- 自動検証: 成功\n\nこのIssueが要件定義用であれば、'brd:ready' ラベルを付与し、次の '01 Plan Issues' を実行してください。"
+            gh issue comment "${{ steps.input.outputs.source_issue }}" --body "BRDの生成/更新が完了しました。\n\n- ファイル: docs/requirements/BRD.md\n- 自動検証: 成功\n\nこのIssueが要件定義用であれば、'brd:ready' ラベルを付与し、次の '01 Plan Issues' を実行してください。"
             gh issue edit "${{ steps.input.outputs.source_issue }}" --add-label "brd:ready" || true
           fi
-

@@ -134,7 +134,12 @@ jobs:
             5. セキュリティを考慮（Secretsをコミットしない）
             ${{ steps.check-feedback.outputs.has_feedback == 'true' && '6. 前回の問題点を必ず解決する' || '' }}
 
-            必要なファイルを作成・編集して、実装を完成させてください。
+            ドキュメント方針：ドキュメントは docs/ に集約します。以下を満たしてください。
+            - 要件・設計・テスト観点・リスク・ロールバックの要点を docs/issues/${{ env.ISSUE_NUMBER }}/README.md にまとめる
+            - 必要に応じて docs/tech/* または docs/architecture/* を更新
+            - BRD は docs/requirements/BRD.md を正とする（必要があれば更新）
+
+            必要なファイルを作成・編集して、実装とドキュメントを完成させてください。
 
       - name: Commit and push implementation
         run: |
