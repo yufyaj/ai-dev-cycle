@@ -18,6 +18,7 @@ permissions:
   contents: read
   issues: write
   actions: write
+  workflows: write
 
 concurrency:
   group: orchestrate-next
@@ -35,6 +36,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install dependencies (PyGithub)
+        run: |
+          pip install -q PyGithub
 
       - name: Determine next issue
         id: pick
@@ -64,4 +69,4 @@ jobs:
             --ref main \
             --field issue_number="${{ steps.pick.outputs.issue }}" \
             --field max_retry_count="5"
-
+        shell: bash
