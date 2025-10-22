@@ -129,9 +129,8 @@ jobs:
             以下の要件を守ってください：
             1. CLAUDE.mdのルールを厳守
             2. TDD原則でテストコードも実装
-            3. PRサイズは10ファイル/500行以内
-            4. 責務分離を遵守（レイヤー境界を守る）
-            5. セキュリティを考慮（Secretsをコミットしない）
+            3. 責務分離を遵守（レイヤー境界を守る）
+            4. セキュリティを考慮（Secretsをコミットしない）
             ${{ steps.check-feedback.outputs.has_feedback == 'true' && '6. 前回の問題点を必ず解決する' || '' }}
 
             ドキュメント方針：ドキュメントは docs/ に集約します。以下を満たしてください。
@@ -266,178 +265,17 @@ jobs:
             echo "❌ テスト失敗"
             echo "passed=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Fix test failures with Claude - Attempt 1
-        if: steps.test-result.outputs.passed != 'true'
-        uses: anthropics/claude-code-action@beta
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          mode: 'agent'
-          direct_prompt: |
-            テストが失敗しました。エラーを修正してください。
-
-            以下の手順で修正を実施してください：
-            1. out/test_results.log ファイルからテストエラーログを確認
-            2. エラーの原因を特定
-            3. CLAUDE.mdのルールに従って修正コードを生成
-            4. TDD原則に基づいて修正（テストが通るように実装を修正）
-            5. 修正したファイルを保存
-
-            これは修正試行 1回目/3回 です。
-
-      - name: Commit and test - Attempt 1
-        if: steps.test-result.outputs.passed != 'true'
-        id: fix-attempt-1
-        run: |
-          # 修正をコミット
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "fix: テスト失敗の自動修正 (試行 1/3)
-
-            🤖 AI によるテスト修正
-            Issue #${ISSUE_NUMBER}
-
-            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
-            git push
-          fi
-
-          # テスト再実行
-          echo "🧪 修正後のテストを実行..."
-          python3 scripts/run_all_tests.py
-          if [ $? -eq 0 ]; then
-            echo "✅ テスト成功！"
-            echo "success=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ テストがまだ失敗しています"
-            echo "success=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Fix test failures with Claude - Attempt 2
-        if: steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true'
-        uses: anthropics/claude-code-action@beta
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          mode: 'agent'
-          direct_prompt: |
-            前回の修正後もテストが失敗しています。再度修正を試みてください。
-
-            前回とは異なるアプローチで修正を試みてください：
-            1. out/test_results.log から最新のエラーを確認
-            2. 前回の修正が不十分だった理由を分析
-            3. より根本的な修正を実施
-            4. 必要に応じてテストコード自体も修正可能
-
-            これは修正試行 2回目/3回 です。
-
-      - name: Commit and test - Attempt 2
-        if: steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true'
-        id: fix-attempt-2
-        run: |
-          # 修正をコミット
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "fix: テスト失敗の自動修正 (試行 2/3)
-
-            🤖 AI によるテスト修正（再試行）
-            Issue #${ISSUE_NUMBER}
-
-            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
-            git push
-          fi
-
-          # テスト再実行
-          echo "🧪 修正後のテストを実行..."
-          python3 scripts/run_all_tests.py
-          if [ $? -eq 0 ]; then
-            echo "✅ テスト成功！"
-            echo "success=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ テストがまだ失敗しています"
-            echo "success=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Fix test failures with Claude - Attempt 3
-        if: steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true'
-        uses: anthropics/claude-code-action@beta
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          mode: 'agent'
-          direct_prompt: |
-            2回の修正試行後もテストが失敗しています。最後の修正を試みてください。
-
-            最終試行として以下を検討してください：
-            1. out/test_results.log から根本原因を再分析
-            2. 設計レベルの問題がないか確認
-            3. 環境依存の問題がないか確認
-            4. 必要最小限の実装に簡素化することも検討
-
-            これは最後の修正試行 3回目/3回 です。
-            この試行で解決できない場合は、より大きな設計変更が必要かもしれません。
-
-      - name: Commit and test - Attempt 3
-        if: steps.fix-attempt-2.outputs.success != 'true' && steps.fix-attempt-1.outputs.success != 'true' && steps.test-result.outputs.passed != 'true'
-        id: fix-attempt-3
-        run: |
-          # 修正をコミット
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "fix: テスト失敗の自動修正 (試行 3/3)
-
-            🤖 AI によるテスト修正（最終試行）
-            Issue #${ISSUE_NUMBER}
-
-            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
-            git push
-          fi
-
-          # テスト再実行
-          echo "🧪 修正後のテストを実行..."
-          python3 scripts/run_all_tests.py
-          if [ $? -eq 0 ]; then
-            echo "✅ テスト成功！"
-            echo "success=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ 3回の修正試行後もテストが失敗しました"
-            echo "success=false" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
       - name: Determine if reimplementation needed
         id: final-check
         run: |
-          # どれか一つの試行でも成功したか確認
-          TEST_SUCCESS=false
-          if [ "${{ steps.test-result.outputs.passed }}" == "true" ]; then
-            TEST_SUCCESS=true
-            echo "✅ 初回テストで成功"
-          elif [ "${{ steps.fix-attempt-1.outputs.success }}" == "true" ]; then
-            TEST_SUCCESS=true
-            echo "✅ 1回目の修正で成功"
-          elif [ "${{ steps.fix-attempt-2.outputs.success }}" == "true" ]; then
-            TEST_SUCCESS=true
-            echo "✅ 2回目の修正で成功"
-          elif [ "${{ steps.fix-attempt-3.outputs.success }}" == "true" ]; then
-            TEST_SUCCESS=true
-            echo "✅ 3回目の修正で成功"
-          fi
-
-          if [ "$TEST_SUCCESS" != "true" ]; then
-            echo "🔄 3回の修正試行後もテスト失敗 - 再実装が必要です"
+          if [ "${{ steps.test-result.outputs.passed }}" != "true" ]; then
+            echo "🔄 テスト失敗 - 再実装が必要です"
             echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
-
-            # フィードバック情報を作成
-            cat > out/feedback.txt << EOF
-          テストで以下の問題が解決できませんでした（3回の修正試行後）:
-          - 最新のテストエラーはout/test_results.logを確認
-          - 複数回の修正でも解決できない根本的な問題がある可能性
-
-          実装を根本から見直してください:
-          1. 設計レベルの問題がないか確認
-          2. 要件の理解が正しいか確認
-          3. より簡潔な実装アプローチを検討
+            # フィードバックの雛形を作成
+            cat > out/feedback.txt << 'EOF'
+          テストで失敗が検出されました:
+          - 最新のテストエラーは out/test_results.log を参照してください
+          - 設計や依存の見直しが必要な可能性があります
           EOF
           else
             echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
@@ -511,8 +349,7 @@ jobs:
             1. CLAUDE.mdルールの遵守
             2. アーキテクチャ原則（レイヤー境界、責務分離）
             3. TDD原則（テストの有無、品質）
-            4. PRサイズ制限（10ファイル/500行）
-            5. コード品質とベストプラクティス
+            4. コード品質とベストプラクティス
 
             レビュー結果をout/review_result.jsonに以下の形式で保存してください：
             {
@@ -547,35 +384,23 @@ jobs:
             echo "✅ レビュー完了（デフォルト承認）"
           fi
 
-      - name: Commit review fixes
-        if: steps.review-result.outputs.passed != 'true'
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "fix: レビュー指摘事項の修正
-
-            🤖 AI によるレビュー修正
-            Issue #${ISSUE_NUMBER}
-
-            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
-            git push
-          fi
-
       - name: Determine if reimplementation needed
         id: final-check
         run: |
-          if [ -f out/review_result.json ]; then
-            # レビュー結果から判定
-            HAS_CRITICAL=$(python3 -c "import json; r=json.load(open('out/review_result.json')); issues=r.get('issues',[]); print('true' if any(i.get('severity') in ['critical'] for i in issues) else 'false')")
-
-            if [ "$HAS_CRITICAL" == "true" ]; then
-              echo "🔄 アーキテクチャレベルの問題を検出 - 再実装が必要です"
-              echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
-
-              # フィードバック情報を作成
-              python3 -c "import json; r=json.load(open('out/review_result.json')); fb=['レビューで以下のクリティカルな問題が検出されました:']; [fb.extend([f\"- {i.get('description')} ({i.get('file', 'N/A')})\", f\"  推奨: {i.get('suggestion', 'N/A')}\"]) for i in r.get('issues', []) if i.get('severity')=='critical']; open('out/feedback.txt', 'w').write('\n'.join(fb))"
-            else
-              echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
+          if [ "${{ steps.review-result.outputs.passed }}" != "true" ]; then
+            echo "🔄 レビュー未承認 - 再実装が必要です"
+            echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
+            # フィードバック情報を作成（可能なら詳細）
+            if [ -f out/review_result.json ]; then
+              python3 - <<'PY'
+import json
+r=json.load(open('out/review_result.json'))
+fb=["レビューで問題が検出されました:"]
+for i in r.get('issues', []):
+  fb.append(f"- [{i.get('severity','')}] {i.get('description','')} ({i.get('file','N/A')})")
+  if i.get('suggestion'): fb.append(f"  推奨: {i['suggestion']}")
+open('out/feedback.txt','w').write('\n'.join(fb))
+PY
             fi
           else
             echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
@@ -692,36 +517,24 @@ jobs:
             echo "✅ セキュリティチェック完了（デフォルト合格）"
           fi
 
-      - name: Commit security fixes
-        if: steps.security-result.outputs.passed != 'true'
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git add .
-            git commit -m "fix: セキュリティ問題の修正
-
-            🔒 AI によるセキュリティ修正
-            Issue #${ISSUE_NUMBER}
-
-            Co-authored-by: Claude AI <claude-agent@anthropic.com>"
-            git push
-          fi
-
       - name: Determine if reimplementation needed
         id: final-check
         run: |
-          if [ -f out/security_analysis.json ]; then
-            # セキュリティ分析結果から判定
-            HAS_CRITICAL=$(python3 -c "import json; r=json.load(open('out/security_analysis.json')); print('true' if r.get('has_critical_issues', False) else 'false')")
-            HAS_SECRETS=$(python3 -c "import json; r=json.load(open('out/security_analysis.json')); print('true' if r.get('has_secrets', False) else 'false')")
-
-            if [ "$HAS_SECRETS" == "true" ]; then
-              echo "🔄 Secretsの埋め込みを検出 - 再実装が必要です"
-              echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
-
-              # フィードバック情報を作成
-              python3 -c "import json; s=json.load(open('out/security_analysis.json')); fb=['セキュリティ分析で以下の重大な問題が検出されました:']; [fb.extend([f\"- {i.get('description')} ({i.get('file', 'N/A')})\", f\"  推奨: {i.get('recommendation', 'N/A')}\"]) for i in s.get('issues', []) if i.get('severity')=='critical']; fb.extend(['- Secretsや認証情報のハードコーディングが検出されました', '  推奨: 環境変数またはGitHub Secretsを使用してください']) if s.get('has_secrets') else None; open('out/feedback.txt', 'w').write('\n'.join(fb))"
-            else
-              echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
+          if [ "${{ steps.security-result.outputs.passed }}" != "true" ]; then
+            echo "🔄 セキュリティ未合格 - 再実装が必要です"
+            echo "needs_reimplementation=true" >> $GITHUB_OUTPUT
+            if [ -f out/security_analysis.json ]; then
+              python3 - <<'PY'
+import json
+s=json.load(open('out/security_analysis.json'))
+fb=["セキュリティ分析で問題が検出されました:"]
+for i in s.get('issues', []):
+  if i.get('severity') in ['high','critical']:
+    fb.append(f"- [{i.get('severity')}] {i.get('description','')} ({i.get('file','N/A')})")
+    if i.get('recommendation'): fb.append(f"  推奨: {i['recommendation']}")
+if s.get('has_secrets'): fb.append('- Secretsや認証情報のハードコーディングが検出されました（環境変数 or GitHub Secrets を使用）')
+open('out/feedback.txt','w').write('\n'.join(fb))
+PY
             fi
           else
             echo "needs_reimplementation=false" >> $GITHUB_OUTPUT
