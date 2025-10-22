@@ -5,7 +5,6 @@
   - 変更単位（Issue/PR）: docs/issues/<Issue番号>/README.md
   - 技術スタック: docs/tech/stack_*.md
 - 守るべき原則（抜粋）
-  - 1PR = 1機能、PRサイズ10ファイル/500行以内
   - TDD原則、PRにテストを含める
   - 責務分離（UI/BFF/Usecase/Domain/Infra）
   - Secretsをコミットしない

@@ -127,7 +127,7 @@ jobs:
             ${{ steps.check-feedback.outputs.has_feedback == 'true' && format('⚠️ 前回実行での問題点（必ず対応してください）:\n{0}\n\nこれらの問題を解決するよう実装を見直してください。', env.FEEDBACK) || '' }}
 
             以下の要件を守ってください：
-            1. CLAUDE.mdのルールを厳守
+            1. docs/tech/*, docs/architecture/*, docs/requirements/BRD.md のルールを厳守
             2. TDD原則でテストコードも実装
             3. 責務分離を遵守（レイヤー境界を守る）
             4. セキュリティを考慮（Secretsをコミットしない）
@@ -346,7 +346,7 @@ jobs:
             Issue #${{ env.ISSUE_NUMBER }} の実装をレビューしてください。
 
             以下の観点でレビューを実施してください：
-            1. CLAUDE.mdルールの遵守
+            1. docs/tech/*, docs/architecture/*, docs/requirements/BRD.md ルールの遵守
             2. アーキテクチャ原則（レイヤー境界、責務分離）
             3. TDD原則（テストの有無、品質）
             4. コード品質とベストプラクティス
